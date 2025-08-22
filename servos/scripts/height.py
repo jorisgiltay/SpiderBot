@@ -26,17 +26,16 @@ def clamp_ticks(val: int, smin: int, smax: int) -> int:
 
 
 def map_height_to_knee_ticks(height_mm: float, base_mid: int, min_ticks: int, max_ticks: int) -> int:
-    # Simple linear mapping example: define a plausible range of height adjustments
-    # height_mm in [-40, +40] maps to knee ticks offset in [knee_extend, knee_bend]
-    # Positive height reduces knee bend (extends), negative height increases bend.
-    height_mm = max(-40.0, min(40.0, height_mm))
-    # Compute offset: -40 -> +delta, +40 -> -delta
-    delta = (max_ticks - min_ticks) * 0.15  # use 15% of knee range as adjustable window
-    # Normalize height to [-1, 1]
-    n = height_mm / 40.0
-    # Offset ticks (invert because +height means extending -> lower ticks if min corresponds to extension)
-    offset = int(round(-n * delta))
-    return clamp_ticks(base_mid + offset, min_ticks, max_ticks)
+    # Map height in [0, ~60] mm to knee ticks where:
+    # 0 mm  -> max_ticks (fully bent, lying low)
+    # 60 mm -> base_mid  (max practical height per JSON "mid")
+    max_height_mm = 60.0
+    h = max(0.0, min(max_height_mm, float(height_mm)))
+    t = h / max_height_mm  # 0..1
+    # Linear interpolation between max_ticks (low) and base_mid (high)
+    target = int(round((1.0 - t) * max_ticks + t * base_mid))
+    # Safety clamp to servo's physical [min,max]
+    return clamp_ticks(target, min_ticks, max_ticks)
 
 
 def main() -> int:
@@ -45,7 +44,7 @@ def main() -> int:
     parser.add_argument("--baud", type=int, default=1_000_000, help="Baudrate (default: 1_000_000)")
     parser.add_argument("--speed", type=int, default=2400, help="Servo speed (ticks/s)")
     parser.add_argument("--acc", type=int, default=50, help="Servo acceleration")
-    parser.add_argument("--height", type=float, default=0.0, help="Relative height in mm (approx, -40..+40)")
+    parser.add_argument("--height", type=float, default=0.0, help="Body height in mm (0..~60, 0=ground, ~60=max)")
     parser.add_argument("--hold", type=float, default=0.8, help="Seconds to hold the pose before exit")
     args = parser.parse_args()
 
