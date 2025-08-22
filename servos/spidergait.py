@@ -92,6 +92,46 @@ def compute_leg_targets_for_direction(
     return stance_target, place_target
 
 
+def move_all_to_neutral(
+    manager: ServoManager,
+    ranges: Dict[int, Dict[str, int]],
+    speed: int,
+    acc: int,
+    tolerance: int = 8,
+    timeout_s: float = 2.0,
+) -> None:
+    """Move all hips/knees to mid and wait until they settle or timeout."""
+    target_by_id: Dict[int, int] = {sid: int(ranges[sid]["mid"]) for sid in (1, 2, 3, 4, 5, 6, 7, 8)}
+    # Send commands
+    for sid in (1, 2, 3, 4, 5, 6, 7, 8):
+        try:
+            manager.set_torque(sid, True)
+            manager.write_position(sid, target_by_id[sid], speed, acc)
+        except Exception:
+            pass
+    # Wait until all within tolerance or timeout
+    start = time.time()
+    remaining = set(target_by_id.keys())
+    while remaining and (time.time() - start) < timeout_s:
+        done_now = []
+        for sid in list(remaining):
+            try:
+                st, err = manager.read_status(sid)
+                if err is None and st:
+                    pres = int(st.get("present_position", 1 << 30))
+                    if abs(pres - target_by_id[sid]) <= tolerance:
+                        done_now.append(sid)
+            except Exception:
+                # If we can't read, assume it's done to avoid hanging
+                done_now.append(sid)
+        for sid in done_now:
+            if sid in remaining:
+                remaining.remove(sid)
+        time.sleep(0.05)
+    # Small settle pause
+    time.sleep(0.15)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Spider gait: one leg at a time crawl (smooth control loop)")
     parser.add_argument("--port", required=True, help="Serial port (e.g., COM3 or /dev/ttyUSB0)")
@@ -191,12 +231,7 @@ def main() -> None:
     except KeyboardInterrupt:
         print("\nStopping gait... Moving to neutral.")
         try:
-            # Move all hips and knees to their mid positions (neutral)
-            for hip_id in (1, 3, 5, 7):
-                manager.write_position(hip_id, int(ranges[hip_id]["mid"]), args.speed, args.acc)
-            for knee_id in (2, 4, 6, 8):
-                manager.write_position(knee_id, int(ranges[knee_id]["mid"]), args.speed, args.acc)
-            time.sleep(0.4)
+            move_all_to_neutral(manager, ranges, args.speed, args.acc)
         except Exception:
             pass
     finally:
