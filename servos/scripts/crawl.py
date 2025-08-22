@@ -47,6 +47,12 @@ def plan_crawl_sequence() -> list:
     ]
 
 
+# Direction inversion configuration
+# Invert knee direction for all knees; invert hip direction for hips 3 and 7
+HIP_INVERT_IDS = {3, 7}
+KNEE_INVERT_IDS = {2, 4, 6, 8}
+
+
 def safe_write_position(manager: ServoManager, sid: int, pos: int, speed: int, acc: int, retries: int = 3, pause_s: float = 0.05) -> bool:
     # Ensure torque, try multiple times with small pauses
     ok, _ = manager.set_torque(sid, True)
@@ -116,7 +122,10 @@ def main() -> int:
 
                 # Lift swing leg
                 s_knee = ranges[f"servo{knee}"]
-                knee_lift = clamp_ticks(int(s_knee["mid"]) - int(args.lift), int(s_knee["min"]), int(s_knee["max"]))
+                if knee in KNEE_INVERT_IDS:
+                    knee_lift = clamp_ticks(int(s_knee["mid"]) + int(args.lift), int(s_knee["min"]), int(s_knee["max"]))
+                else:
+                    knee_lift = clamp_ticks(int(s_knee["mid"]) - int(args.lift), int(s_knee["min"]), int(s_knee["max"]))
                 ok = safe_write_position(manager, knee, knee_lift, args.speed, args.acc)
                 if not ok:
                     print(f"Knee lift {knee} failed")
@@ -124,7 +133,10 @@ def main() -> int:
 
                 # Advance hip forward
                 s_hip = ranges[f"servo{hip}"]
-                hip_forward = clamp_ticks(int(s_hip["mid"]) + int(args.step), int(s_hip["min"]), int(s_hip["max"]))
+                hip_delta = int(args.step)
+                if hip in HIP_INVERT_IDS:
+                    hip_delta = -hip_delta
+                hip_forward = clamp_ticks(int(s_hip["mid"]) + hip_delta, int(s_hip["min"]), int(s_hip["max"]))
                 ok = safe_write_position(manager, hip, hip_forward, args.speed, args.acc)
                 if not ok:
                     print(f"Hip advance {hip} failed")
@@ -142,7 +154,9 @@ def main() -> int:
                 if args.nudges:
                     def nudge(sid: int, delta: int) -> None:
                         s = ranges[f"servo{sid}"]
-                        tgt = clamp_ticks(int(s["mid"]) + delta, int(s["min"]), int(s["max"]))
+                        # Respect hip inversion for nudges as well
+                        adj = -delta if sid in HIP_INVERT_IDS else delta
+                        tgt = clamp_ticks(int(s["mid"]) + adj, int(s["min"]), int(s["max"]))
                         ok2 = safe_write_position(manager, sid, tgt, args.speed, args.acc)
                         if not ok2:
                             print(f"Nudge {sid} failed")
