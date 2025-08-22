@@ -247,6 +247,8 @@ def main() -> None:
     parser.add_argument("--knee-sign", type=int, choices=[-1,1], default=1, help="+1 or -1 mapping from knee angle to ticks")
     parser.add_argument("--knee-sign-override", type=str, default="", help="Per-knee overrides like 2:-1,4:-1 (comma-separated)")
     parser.add_argument("--reverse-hips", type=str, default="3,7", help="Comma-separated hip IDs with reversed swing direction")
+    # Knee swing direction per knee: 'up' means toward max (default) or toward min
+    parser.add_argument("--knee-swing-up", type=str, default="2:+,4:+,6:+,8:+", help="Per-knee swing direction (+ toward max, - toward min), e.g., 8:-")
     parser.add_argument("--order", choices=["crawl", "diagonal"], default="diagonal", help="Leg stepping order")
     parser.add_argument("--ranges-file", default=os.path.join(THIS_DIR, "servo_ranges.json"), help="Path to ranges JSON file")
     parser.add_argument("--gait-mode", choices=["crawl", "trot"], default="crawl", help="Crawl = one leg swing; Trot = diagonal pairs swing together")
@@ -358,6 +360,25 @@ def main() -> None:
         while True:
             if args.gait_mode == "crawl" and args.crawl_style == "discrete":
                 # Discrete crawl: move one leg through full swing while others hold their current stance positions
+                # Parse swing directions
+                swing_dir: Dict[int, int] = {2: 1, 4: 1, 6: 1, 8: 1}
+                try:
+                    if args.knee_swing_up:
+                        for tok in args.knee_swing_up.split(","):
+                            t = tok.strip()
+                            if not t:
+                                continue
+                            if ":" in t:
+                                k_str, s_str = t.split(":", 1)
+                                if k_str.strip().isdigit():
+                                    k = int(k_str.strip())
+                                    if s_str.strip().startswith("-"):
+                                        swing_dir[k] = -1
+                                    else:
+                                        swing_dir[k] = 1
+                except Exception:
+                    pass
+
                 for hip_id, knee_id in legs:
                     # Ensure others are at their stance target and knees at biased mid
                     for other_hip, other_knee in legs:
@@ -377,7 +398,13 @@ def main() -> None:
                         u_e = ease_in_out_sine(u)
                         hip_pos_f = lerp(float(stance_target_for[hip_id]), float(place_target_for[hip_id]), u_e)
                         s = math.sin(math.pi * u)
-                        knee_pos_f = float(knee_mid[knee_id]) + s * (float(knee_max[knee_id]) - float(knee_mid[knee_id])) * lift_scale
+                        # Choose knee lift direction per knee
+                        if swing_dir.get(knee_id, 1) >= 0:
+                            knee_span = float(knee_max[knee_id]) - float(knee_mid[knee_id])
+                            knee_pos_f = float(knee_mid[knee_id]) + s * knee_span * lift_scale
+                        else:
+                            knee_span = float(knee_mid[knee_id]) - float(knee_min[knee_id])
+                            knee_pos_f = float(knee_mid[knee_id]) - s * knee_span * lift_scale
                         knee_cmd = clamp_knee(knee_id, knee_pos_f)
                         manager.write_position(hip_id, int(round(hip_pos_f)), args.speed, args.acc)
                         manager.write_position(knee_id, knee_cmd, args.speed, args.acc)
@@ -387,6 +414,25 @@ def main() -> None:
                     time.sleep(dt * 2)
             else:
                 # Smooth loop: original continuous creeping stance
+                # Parse swing directions
+                swing_dir: Dict[int, int] = {2: 1, 4: 1, 6: 1, 8: 1}
+                try:
+                    if args.knee_swing_up:
+                        for tok in args.knee_swing_up.split(","):
+                            t = tok.strip()
+                            if not t:
+                                continue
+                            if ":" in t:
+                                k_str, s_str = t.split(":", 1)
+                                if k_str.strip().isdigit():
+                                    k = int(k_str.strip())
+                                    if s_str.strip().startswith("-"):
+                                        swing_dir[k] = -1
+                                    else:
+                                        swing_dir[k] = 1
+                except Exception:
+                    pass
+
                 for hip_id, knee_id in legs:
                     # Phase in [0,1) for this leg
                     phase = mod1((t / T) + leg_offsets[(hip_id, knee_id)])
@@ -397,7 +443,12 @@ def main() -> None:
                         hip_pos_f = lerp(float(stance_target_for[hip_id]), float(place_target_for[hip_id]), u_e)
                         # Knee lift: mid -> max at u=0.5 -> mid at u=1
                         s = math.sin(math.pi * u)
-                        knee_pos_f = float(knee_mid[knee_id]) + s * (float(knee_max[knee_id]) - float(knee_mid[knee_id])) * lift_scale
+                        if swing_dir.get(knee_id, 1) >= 0:
+                            knee_span = float(knee_max[knee_id]) - float(knee_mid[knee_id])
+                            knee_pos_f = float(knee_mid[knee_id]) + s * knee_span * lift_scale
+                        else:
+                            knee_span = float(knee_mid[knee_id]) - float(knee_min[knee_id])
+                            knee_pos_f = float(knee_mid[knee_id]) - s * knee_span * lift_scale
                     else:
                         # Stance: hip creeps back from place -> stance; use IK (optional) to keep foot on ground
                         v = (phase - swing_frac) / (1.0 - swing_frac)
