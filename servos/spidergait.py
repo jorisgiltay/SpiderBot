@@ -19,16 +19,26 @@ from gait import parse_ranges_file, compute_hip_targets  # type: ignore  # noqa:
 Leg = Tuple[int, int]  # (hip_id, knee_id)
 
 
-def build_leg_order(direction: str) -> List[Leg]:
+def build_leg_order(direction: str, order: str = "diagonal") -> List[Leg]:
     """
-    Crawl order used for phase offsets: FL → FR → RL → RR
+    Crawl order used for phase offsets.
+    - crawl: FL → FR → RL → RR
+    - diagonal: FL → RR → FR → RL
     """
-    legs: List[Leg] = [
-        (1, 2),  # Front Left
-        (3, 4),  # Front Right
-        (5, 6),  # Rear Left
-        (7, 8),  # Rear Right
-    ]
+    if order == "diagonal":
+        legs: List[Leg] = [
+            (1, 2),  # Front Left
+            (7, 8),  # Rear Right
+            (3, 4),  # Front Right
+            (5, 6),  # Rear Left
+        ]
+    else:
+        legs = [
+            (1, 2),  # Front Left
+            (3, 4),  # Front Right
+            (5, 6),  # Rear Left
+            (7, 8),  # Rear Right
+        ]
     return legs
 
 
@@ -137,12 +147,15 @@ def main() -> None:
     parser.add_argument("--port", required=True, help="Serial port (e.g., COM3 or /dev/ttyUSB0)")
     parser.add_argument("--baudrate", type=int, default=1_000_000, help="Baudrate (default 1000000)")
     parser.add_argument("--direction", choices=["forward", "backward"], default="forward", help="Gait direction")
-    parser.add_argument("--cycle-time", type=float, default=2.5, help="Total cycle duration in seconds")
+    parser.add_argument("--cycle-time", type=float, default=2.8, help="Total cycle duration in seconds")
     parser.add_argument("--swing-frac", type=float, default=0.2, help="Fraction of cycle for swing phase per leg (<=0.25)")
     parser.add_argument("--tick-hz", type=float, default=30.0, help="Command update rate (Hz)")
     parser.add_argument("--speed", type=int, default=2600, help="Commanded speed for moves")
     parser.add_argument("--acc", type=int, default=60, help="Commanded acceleration for moves")
     parser.add_argument("--lift-scale", type=float, default=1.0, help="Scale for knee lift (0..1) toward max")
+    parser.add_argument("--stance-knee-bias", type=float, default=0.15, help="Lower stance knees by this fraction of (mid-min), 0..0.5")
+    parser.add_argument("--stance-hold-frac", type=float, default=0.25, help="Hold hips wide for this fraction at start of stance, 0..0.6")
+    parser.add_argument("--order", choices=["crawl", "diagonal"], default="diagonal", help="Leg stepping order")
     parser.add_argument("--ranges-file", default=os.path.join(THIS_DIR, "servo_ranges.json"), help="Path to ranges JSON file")
     args = parser.parse_args()
 
@@ -152,12 +165,13 @@ def main() -> None:
     ensure_all_present(ranges, [1, 2, 3, 4, 5, 6, 7, 8])
     hip_low_high = compute_hip_low_high(ranges)
 
-    # Knee mid/max map
+    # Knee min/mid/max maps
+    knee_min: Dict[int, int] = {sid: int(ranges[sid]["min"]) for sid in (2, 4, 6, 8)}
     knee_mid: Dict[int, int] = {sid: int(ranges[sid]["mid"]) for sid in (2, 4, 6, 8)}
     knee_max: Dict[int, int] = {sid: int(ranges[sid]["max"]) for sid in (2, 4, 6, 8)}
 
     # Build leg order and per-leg phase offsets (ensure only one leg swings at a time)
-    legs = build_leg_order(args.direction)
+    legs = build_leg_order(args.direction, args.order)
     # Enforce swing fraction safety
     swing_frac = max(0.05, min(0.25, float(args.swing_frac)))
     # Phase offsets equally spaced across cycle for 4 legs
@@ -219,8 +233,16 @@ def main() -> None:
                 else:
                     # Stance: hip creeps back from place -> stance, knee stays at mid
                     v = (phase - swing_frac) / (1.0 - swing_frac)
-                    hip_pos_f = lerp(float(place_target_for[hip_id]), float(stance_target_for[hip_id]), v)
-                    knee_pos_f = float(knee_mid[knee_id])
+                    # Hold wide base for early stance to increase stability
+                    hold = max(0.0, min(0.6, float(args.stance_hold_frac)))
+                    if v < hold:
+                        hip_pos_f = float(place_target_for[hip_id])
+                    else:
+                        v2 = (v - hold) / (1.0 - hold)
+                        hip_pos_f = lerp(float(place_target_for[hip_id]), float(stance_target_for[hip_id]), v2)
+                    # Slightly lower stance knee to improve support (toward min)
+                    bias = max(0.0, min(0.5, float(args.stance_knee_bias)))
+                    knee_pos_f = float(knee_mid[knee_id]) - bias * (float(knee_mid[knee_id]) - float(knee_min[knee_id]))
 
                 manager.write_position(hip_id, int(round(hip_pos_f)), args.speed, args.acc)
                 manager.write_position(knee_id, int(round(knee_pos_f)), args.speed, args.acc)
