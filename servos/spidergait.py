@@ -118,6 +118,68 @@ def scale_hip_targets(
     return out
 
 
+def degrees_to_ticks(deg: float) -> int:
+    # Approx 0..4095 maps to 0..360 degrees
+    return int(round(deg * (4095.0 / 360.0)))
+
+
+def enforce_hip_deg_limit(
+    hip_low_high: Dict[int, Tuple[int, int]],
+    ranges: Dict[int, Dict[str, int]],
+    max_deg: float,
+) -> Dict[int, Tuple[int, int]]:
+    out: Dict[int, Tuple[int, int]] = {}
+    delta = degrees_to_ticks(max_deg)
+    for hip_id, (low, high) in hip_low_high.items():
+        mid = int(ranges[hip_id]["mid"])
+        low_l = max(int(ranges[hip_id]["min"]), mid - delta)
+        high_l = min(int(ranges[hip_id]["max"]), mid + delta)
+        # Also clamp within existing low/high just in case
+        low_l = max(low_l, min(low, high))
+        high_l = min(high_l, max(low, high))
+        out[hip_id] = (low_l, high_l)
+    return out
+
+
+def ticks_to_rad_ticks_mapping(mid: int) -> Tuple[float, int]:
+    # Returns (ticks_per_rad, mid)
+    ticks_per_rad = 4095.0 / (2.0 * 3.141592653589793)
+    return ticks_per_rad, mid
+
+
+def knee_ik_ticks(
+    hip_ticks: int,
+    knee_mid_ticks: int,
+    knee_sign: int,
+    hip_mid_ticks: int,
+    hip_link_mm: float,
+    knee_link_mm: float,
+    hip_height_mm: float,
+    stance_knee_bias_ticks: float,
+) -> int:
+    """
+    Simple planar IK in sagittal plane:
+    - hip angle from hip_ticks relative to hip_mid
+    - desired foot: y=0 (ground), x = hip_link*cos(hip) + knee_link*cos(knee_rel)
+    We solve knee approx by keeping knee such that ankle reaches ground with given hip height.
+    Here we use a simplified law: knee angle set so that vertical projection equals hip_height.
+    """
+    import math
+    ticks_per_rad, _ = ticks_to_rad_ticks_mapping(hip_mid_ticks)
+    hip_rad = (hip_ticks - hip_mid_ticks) / ticks_per_rad
+    # Desired knee relative angle via 2-link geometry keeping end effector near ground at hip height
+    # y = hip_link*sin(hip) + knee_link*sin(knee)
+    # target y ≈ -hip_height (down). Solve knee via arcsin clamp.
+    target_y = -float(hip_height_mm)
+    y_hip = hip_link_mm * math.sin(hip_rad)
+    y_needed_from_knee = target_y - y_hip
+    # Clamp to reachable range [-knee_link, knee_link]
+    s = max(-1.0, min(1.0, y_needed_from_knee / max(1e-6, knee_link_mm)))
+    knee_rad = math.asin(s)
+    knee_ticks = knee_mid_ticks + int(round(knee_sign * knee_rad * ticks_per_rad)) + int(round(stance_knee_bias_ticks))
+    return knee_ticks
+
+
 def move_all_to_neutral(
     manager: ServoManager,
     ranges: Dict[int, Dict[str, int]],
@@ -170,10 +232,18 @@ def main() -> None:
     parser.add_argument("--acc", type=int, default=60, help="Commanded acceleration for moves")
     parser.add_argument("--lift-scale", type=float, default=1.0, help="Scale for knee lift (0..1) toward max")
     parser.add_argument("--hip-swing-scale", type=float, default=0.7, help="Scale hip sweep around mid (0..1). 1.0 ≈ 90° total sweep")
+    parser.add_argument("--hip-max-deg", type=float, default=60.0, help="Clamp hip sweep to ±this many degrees around mid")
     parser.add_argument("--stance-knee-bias", type=float, default=0.15, help="Lower stance knees by this fraction of (mid-min), 0..0.5")
     parser.add_argument("--stance-hold-frac", type=float, default=0.25, help="Hold hips wide for this fraction at start of stance, 0..0.6")
+    parser.add_argument("--knee-hip-gain", type=float, default=0.6, help="Stance knee coupling gain with hip motion (ticks per tick)")
     parser.add_argument("--knee-band-frac", type=float, default=0.2, help="Limit knee motion to this fraction of total range (0..1)")
     parser.add_argument("--knee-band-anchor", choices=["min", "max"], default="max", help="Anchor the limited knee range at min (low) or max (high)")
+    # IK options for stance
+    parser.add_argument("--ik-stance", action="store_true", help="Use 2-link IK in stance to keep foot on ground")
+    parser.add_argument("--hip-link-mm", type=float, default=50.0, help="Hip→knee link length (mm)")
+    parser.add_argument("--knee-link-mm", type=float, default=81.0, help="Knee→foot effective length (mm)")
+    parser.add_argument("--hip-height-mm", type=float, default=60.0, help="Desired hip height above ground during stance (mm)")
+    parser.add_argument("--knee-sign", type=int, choices=[-1,1], default=1, help="+1 or -1 mapping from knee angle to ticks")
     parser.add_argument("--order", choices=["crawl", "diagonal"], default="diagonal", help="Leg stepping order")
     parser.add_argument("--ranges-file", default=os.path.join(THIS_DIR, "servo_ranges.json"), help="Path to ranges JSON file")
     parser.add_argument("--gait-mode", choices=["crawl", "trot"], default="crawl", help="Crawl = one leg swing; Trot = diagonal pairs swing together")
@@ -185,8 +255,9 @@ def main() -> None:
     # Validate all 8 servos present
     ensure_all_present(ranges, [1, 2, 3, 4, 5, 6, 7, 8])
     hip_low_high = compute_hip_low_high(ranges)
-    # Optionally scale hip sweep amplitude
+    # Optionally scale hip sweep amplitude then enforce degree cap
     hip_low_high = scale_hip_targets(hip_low_high, ranges, args.hip_swing_scale)
+    hip_low_high = enforce_hip_deg_limit(hip_low_high, ranges, args.hip_max_deg)
 
     # Knee min/mid/max maps
     knee_min: Dict[int, int] = {sid: int(ranges[sid]["min"]) for sid in (2, 4, 6, 8)}
@@ -316,7 +387,7 @@ def main() -> None:
                         s = math.sin(math.pi * u)
                         knee_pos_f = float(knee_mid[knee_id]) + s * (float(knee_max[knee_id]) - float(knee_mid[knee_id])) * lift_scale
                     else:
-                        # Stance: hip creeps back from place -> stance, knee stays at mid
+                        # Stance: hip creeps back from place -> stance; use IK (optional) to keep foot on ground
                         v = (phase - swing_frac) / (1.0 - swing_frac)
                         # Hold wide base for early stance to increase stability
                         hold = max(0.0, min(0.6, float(args.stance_hold_frac)))
@@ -325,10 +396,27 @@ def main() -> None:
                         else:
                             v2 = (v - hold) / (1.0 - hold)
                             hip_pos_f = lerp(float(place_target_for[hip_id]), float(stance_target_for[hip_id]), v2)
-                        # Slightly lower stance knee to improve support (toward min), within band
+                        # Base stance knee bias ticks
                         bias = max(0.0, min(0.5, float(args.stance_knee_bias)))
-                        knee_pos_f = float(knee_mid[knee_id]) - bias * (float(knee_mid[knee_id]) - float(knee_min[knee_id]))
-                        knee_cmd = clamp_knee(knee_id, knee_pos_f)
+                        stance_knee_f = float(knee_mid[knee_id]) - bias * (float(knee_mid[knee_id]) - float(knee_min[knee_id]))
+                        if args.ik_stance:
+                            knee_cmd = knee_ik_ticks(
+                                hip_ticks=int(round(hip_pos_f)),
+                                knee_mid_ticks=int(knee_mid[knee_id]),
+                                knee_sign=int(args.knee_sign),
+                                hip_mid_ticks=int(ranges[hip_id]["mid"]),
+                                hip_link_mm=float(args.hip_link_mm),
+                                knee_link_mm=float(args.knee_link_mm),
+                                hip_height_mm=float(args.hip_height_mm),
+                                stance_knee_bias_ticks=stance_knee_f - float(knee_mid[knee_id]),
+                            )
+                            knee_cmd = clamp_knee(knee_id, knee_cmd)
+                        else:
+                            # Linear coupling fallback
+                            hip_stance = float(stance_target_for[hip_id])
+                            hip_disp = float(hip_pos_f) - hip_stance
+                            knee_pos_f = stance_knee_f + float(args.knee_hip_gain) * hip_disp
+                            knee_cmd = clamp_knee(knee_id, knee_pos_f)
 
                     manager.write_position(hip_id, int(round(hip_pos_f)), args.speed, args.acc)
                     manager.write_position(knee_id, knee_cmd if 'knee_cmd' in locals() else int(round(knee_pos_f)), args.speed, args.acc)
