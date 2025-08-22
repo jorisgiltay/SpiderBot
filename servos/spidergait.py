@@ -72,13 +72,23 @@ def compute_leg_targets_for_direction(
     """Return (stance_target, place_target) per hip based on direction."""
     stance_target: Dict[int, int] = {}
     place_target: Dict[int, int] = {}
+    reversed_hips = {3, 7}  # invert swing direction for these hips
     for hip_id, (low, high) in hip_low_high.items():
-        if direction == "forward":
-            stance_target[hip_id] = low   # back
-            place_target[hip_id] = high  # forward
-        else:  # backward
-            stance_target[hip_id] = high  # forward becomes stance
-            place_target[hip_id] = low    # back becomes placement
+        if hip_id in reversed_hips:
+            # Swap mapping for reversed hips
+            if direction == "forward":
+                stance_target[hip_id] = high
+                place_target[hip_id] = low
+            else:  # backward
+                stance_target[hip_id] = low
+                place_target[hip_id] = high
+        else:
+            if direction == "forward":
+                stance_target[hip_id] = low   # back
+                place_target[hip_id] = high  # forward
+            else:  # backward
+                stance_target[hip_id] = high  # forward becomes stance
+                place_target[hip_id] = low    # back becomes placement
     return stance_target, place_target
 
 
