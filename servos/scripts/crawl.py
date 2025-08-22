@@ -141,6 +141,17 @@ def main() -> int:
                 hip = leg.hip
                 knee = leg.knee
 
+                # Pre-position: sweep hip backward while foot is on ground to prepare forward swing
+                s_hip = ranges[f"servo{hip}"]
+                hip_delta = step_ticks
+                if hip in HIP_INVERT_IDS:
+                    hip_delta = -hip_delta
+                hip_back = clamp_ticks(int(s_hip["mid"]) - hip_delta, int(s_hip["min"]), int(s_hip["max"]))
+                ok = safe_write_position(manager, hip, hip_back, speed_ticks, args.acc)
+                if not ok:
+                    print(f"Hip preload back {hip} failed")
+                time.sleep(args.pause)
+
                 # Lift swing leg
                 s_knee = ranges[f"servo{knee}"]
                 if knee in KNEE_INVERT_IDS:
@@ -153,10 +164,6 @@ def main() -> int:
                 time.sleep(args.pause)
 
                 # Advance hip forward
-                s_hip = ranges[f"servo{hip}"]
-                hip_delta = step_ticks
-                if hip in HIP_INVERT_IDS:
-                    hip_delta = -hip_delta
                 hip_forward = clamp_ticks(int(s_hip["mid"]) + hip_delta, int(s_hip["min"]), int(s_hip["max"]))
                 ok = safe_write_position(manager, hip, hip_forward, speed_ticks, args.acc)
                 if not ok:
