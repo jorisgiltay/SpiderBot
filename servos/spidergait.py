@@ -365,11 +365,11 @@ def main() -> None:
                 try:
                     if args.knee_swing_up:
                         for tok in args.knee_swing_up.split(","):
-                            t = tok.strip()
-                            if not t:
+                            entry = tok.strip()
+                            if not entry:
                                 continue
-                            if ":" in t:
-                                k_str, s_str = t.split(":", 1)
+                            if ":" in entry:
+                                k_str, s_str = entry.split(":", 1)
                                 if k_str.strip().isdigit():
                                     k = int(k_str.strip())
                                     if s_str.strip().startswith("-"):
@@ -419,11 +419,11 @@ def main() -> None:
                 try:
                     if args.knee_swing_up:
                         for tok in args.knee_swing_up.split(","):
-                            t = tok.strip()
-                            if not t:
+                            entry = tok.strip()
+                            if not entry:
                                 continue
-                            if ":" in t:
-                                k_str, s_str = t.split(":", 1)
+                            if ":" in entry:
+                                k_str, s_str = entry.split(":", 1)
                                 if k_str.strip().isdigit():
                                     k = int(k_str.strip())
                                     if s_str.strip().startswith("-"):
