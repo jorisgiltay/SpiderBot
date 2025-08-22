@@ -175,6 +175,7 @@ def main() -> None:
     parser.add_argument("--order", choices=["crawl", "diagonal"], default="diagonal", help="Leg stepping order")
     parser.add_argument("--ranges-file", default=os.path.join(THIS_DIR, "servo_ranges.json"), help="Path to ranges JSON file")
     parser.add_argument("--gait-mode", choices=["crawl", "trot"], default="crawl", help="Crawl = one leg swing; Trot = diagonal pairs swing together")
+    parser.add_argument("--crawl-style", choices=["smooth", "discrete"], default="smooth", help="For crawl: smooth = others creep in stance; discrete = others hold still")
     args = parser.parse_args()
 
     # Load ranges
@@ -249,36 +250,66 @@ def main() -> None:
             return y
 
         while True:
-            for hip_id, knee_id in legs:
-                # Phase in [0,1) for this leg
-                phase = mod1((t / T) + leg_offsets[(hip_id, knee_id)])
-                if phase < swing_frac:
-                    # Swing: hip moves from stance -> place, knee lifts toward max and back (sine-shaped)
-                    u = phase / swing_frac
-                    u_e = ease_in_out_sine(u)
-                    hip_pos_f = lerp(float(stance_target_for[hip_id]), float(place_target_for[hip_id]), u_e)
-                    # Knee lift: mid -> max at u=0.5 -> mid at u=1
-                    s = math.sin(math.pi * u)
-                    knee_pos_f = float(knee_mid[knee_id]) + s * (float(knee_max[knee_id]) - float(knee_mid[knee_id])) * lift_scale
-                else:
-                    # Stance: hip creeps back from place -> stance, knee stays at mid
-                    v = (phase - swing_frac) / (1.0 - swing_frac)
-                    # Hold wide base for early stance to increase stability
-                    hold = max(0.0, min(0.6, float(args.stance_hold_frac)))
-                    if v < hold:
-                        hip_pos_f = float(place_target_for[hip_id])
+            if args.gait_mode == "crawl" and args.crawl_style == "discrete":
+                # Discrete crawl: move one leg through full swing while others hold their current stance positions
+                for hip_id, knee_id in legs:
+                    # Ensure others are at their stance target and knees at biased mid
+                    for other_hip, other_knee in legs:
+                        if other_hip == hip_id:
+                            continue
+                        # Hold hips at current stance target
+                        manager.write_position(other_hip, int(stance_target_for[other_hip]), args.speed, args.acc)
+                        # Hold knees slightly biased down
+                        bias = max(0.0, min(0.5, float(args.stance_knee_biaz))) if False else max(0.0, min(0.5, float(args.stance_knee_bias)))
+                        knee_hold = float(knee_mid[other_knee]) - bias * (float(knee_mid[other_knee]) - float(knee_min[other_knee]))
+                        manager.write_position(other_knee, int(round(knee_hold)), args.speed, args.acc)
+
+                    # Move the active leg through swing
+                    swing_steps = max(10, int(round(swing_frac * T * args.tick_hz)))
+                    for i in range(swing_steps):
+                        u = (i + 1) / swing_steps
+                        u_e = ease_in_out_sine(u)
+                        hip_pos_f = lerp(float(stance_target_for[hip_id]), float(place_target_for[hip_id]), u_e)
+                        s = math.sin(math.pi * u)
+                        knee_pos_f = float(knee_mid[knee_id]) + s * (float(knee_max[knee_id]) - float(knee_mid[knee_id])) * lift_scale
+                        manager.write_position(hip_id, int(round(hip_pos_f)), args.speed, args.acc)
+                        manager.write_position(knee_id, int(round(knee_pos_f)), args.speed, args.acc)
+                        time.sleep(dt)
+
+                    # Brief settle in place before moving to next leg
+                    time.sleep(dt * 2)
+            else:
+                # Smooth loop: original continuous creeping stance
+                for hip_id, knee_id in legs:
+                    # Phase in [0,1) for this leg
+                    phase = mod1((t / T) + leg_offsets[(hip_id, knee_id)])
+                    if phase < swing_frac:
+                        # Swing: hip moves from stance -> place, knee lifts toward max and back (sine-shaped)
+                        u = phase / swing_frac
+                        u_e = ease_in_out_sine(u)
+                        hip_pos_f = lerp(float(stance_target_for[hip_id]), float(place_target_for[hip_id]), u_e)
+                        # Knee lift: mid -> max at u=0.5 -> mid at u=1
+                        s = math.sin(math.pi * u)
+                        knee_pos_f = float(knee_mid[knee_id]) + s * (float(knee_max[knee_id]) - float(knee_mid[knee_id])) * lift_scale
                     else:
-                        v2 = (v - hold) / (1.0 - hold)
-                        hip_pos_f = lerp(float(place_target_for[hip_id]), float(stance_target_for[hip_id]), v2)
-                    # Slightly lower stance knee to improve support (toward min)
-                    bias = max(0.0, min(0.5, float(args.stance_knee_bias)))
-                    knee_pos_f = float(knee_mid[knee_id]) - bias * (float(knee_mid[knee_id]) - float(knee_min[knee_id]))
+                        # Stance: hip creeps back from place -> stance, knee stays at mid
+                        v = (phase - swing_frac) / (1.0 - swing_frac)
+                        # Hold wide base for early stance to increase stability
+                        hold = max(0.0, min(0.6, float(args.stance_hold_frac)))
+                        if v < hold:
+                            hip_pos_f = float(place_target_for[hip_id])
+                        else:
+                            v2 = (v - hold) / (1.0 - hold)
+                            hip_pos_f = lerp(float(place_target_for[hip_id]), float(stance_target_for[hip_id]), v2)
+                        # Slightly lower stance knee to improve support (toward min)
+                        bias = max(0.0, min(0.5, float(args.stance_knee_bias)))
+                        knee_pos_f = float(knee_mid[knee_id]) - bias * (float(knee_mid[knee_id]) - float(knee_min[knee_id]))
 
-                manager.write_position(hip_id, int(round(hip_pos_f)), args.speed, args.acc)
-                manager.write_position(knee_id, int(round(knee_pos_f)), args.speed, args.acc)
+                    manager.write_position(hip_id, int(round(hip_pos_f)), args.speed, args.acc)
+                    manager.write_position(knee_id, int(round(knee_pos_f)), args.speed, args.acc)
 
-            time.sleep(dt)
-            t += dt
+                time.sleep(dt)
+                t += dt
 
     except KeyboardInterrupt:
         print("\nStopping gait... Moving to neutral.")
