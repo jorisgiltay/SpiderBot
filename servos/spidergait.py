@@ -172,6 +172,8 @@ def main() -> None:
     parser.add_argument("--hip-swing-scale", type=float, default=0.7, help="Scale hip sweep around mid (0..1). 1.0 ≈ 90° total sweep")
     parser.add_argument("--stance-knee-bias", type=float, default=0.15, help="Lower stance knees by this fraction of (mid-min), 0..0.5")
     parser.add_argument("--stance-hold-frac", type=float, default=0.25, help="Hold hips wide for this fraction at start of stance, 0..0.6")
+    parser.add_argument("--knee-band-frac", type=float, default=0.2, help="Limit knee motion to this fraction of total range (0..1)")
+    parser.add_argument("--knee-band-anchor", choices=["min", "max"], default="max", help="Anchor the limited knee range at min (low) or max (high)")
     parser.add_argument("--order", choices=["crawl", "diagonal"], default="diagonal", help="Leg stepping order")
     parser.add_argument("--ranges-file", default=os.path.join(THIS_DIR, "servo_ranges.json"), help="Path to ranges JSON file")
     parser.add_argument("--gait-mode", choices=["crawl", "trot"], default="crawl", help="Crawl = one leg swing; Trot = diagonal pairs swing together")
@@ -190,6 +192,27 @@ def main() -> None:
     knee_min: Dict[int, int] = {sid: int(ranges[sid]["min"]) for sid in (2, 4, 6, 8)}
     knee_mid: Dict[int, int] = {sid: int(ranges[sid]["mid"]) for sid in (2, 4, 6, 8)}
     knee_max: Dict[int, int] = {sid: int(ranges[sid]["max"]) for sid in (2, 4, 6, 8)}
+
+    # Knee band helpers
+    band_frac = max(0.05, min(1.0, float(args.knee_band_frac)))
+    def knee_band(sid: int) -> Tuple[int, int]:
+        kmin = knee_min[sid]; kmid = knee_mid[sid]; kmax = knee_max[sid]
+        span = float(kmax - kmin)
+        if args.knee_band_anchor == "min":
+            bmin = kmin
+            bmax = int(round(kmin + band_frac * span))
+        else:
+            bmin = int(round(kmax - band_frac * span))
+            bmax = kmax
+        if kmid < bmin:
+            knee_mid[sid] = bmin
+        if kmid > bmax:
+            knee_mid[sid] = bmax
+        return (min(bmin, bmax), max(bmin, bmax))
+
+    def clamp_knee(sid: int, val: float) -> int:
+        bmin, bmax = knee_band(sid)
+        return int(min(max(int(round(val)), bmin), bmax))
 
     # Build leg order and per-leg phase offsets
     legs = build_leg_order(args.direction, args.order)
@@ -231,11 +254,11 @@ def main() -> None:
         # Targets for direction
         stance_target_for, place_target_for = compute_leg_targets_for_direction(hip_low_high, args.direction)
 
-        # Initialize to stance positions with knees mid
+        # Initialize to stance positions with knees mid (clamped to band)
         for hip_id in (1, 3, 5, 7):
             manager.write_position(hip_id, stance_target_for[hip_id], args.speed, args.acc)
         for knee_id in (2, 4, 6, 8):
-            manager.write_position(knee_id, knee_mid[knee_id], args.speed, args.acc)
+            manager.write_position(knee_id, clamp_knee(knee_id, float(knee_mid[knee_id])), args.speed, args.acc)
         time.sleep(0.3)
 
         # Time-based control loop
@@ -259,10 +282,10 @@ def main() -> None:
                             continue
                         # Hold hips at current stance target
                         manager.write_position(other_hip, int(stance_target_for[other_hip]), args.speed, args.acc)
-                        # Hold knees slightly biased down
-                        bias = max(0.0, min(0.5, float(args.stance_knee_biaz))) if False else max(0.0, min(0.5, float(args.stance_knee_bias)))
+                        # Hold knees slightly biased down within band
+                        bias = max(0.0, min(0.5, float(args.stance_knee_bias)))
                         knee_hold = float(knee_mid[other_knee]) - bias * (float(knee_mid[other_knee]) - float(knee_min[other_knee]))
-                        manager.write_position(other_knee, int(round(knee_hold)), args.speed, args.acc)
+                        manager.write_position(other_knee, clamp_knee(other_knee, knee_hold), args.speed, args.acc)
 
                     # Move the active leg through swing
                     swing_steps = max(10, int(round(swing_frac * T * args.tick_hz)))
@@ -272,8 +295,9 @@ def main() -> None:
                         hip_pos_f = lerp(float(stance_target_for[hip_id]), float(place_target_for[hip_id]), u_e)
                         s = math.sin(math.pi * u)
                         knee_pos_f = float(knee_mid[knee_id]) + s * (float(knee_max[knee_id]) - float(knee_mid[knee_id])) * lift_scale
+                        knee_cmd = clamp_knee(knee_id, knee_pos_f)
                         manager.write_position(hip_id, int(round(hip_pos_f)), args.speed, args.acc)
-                        manager.write_position(knee_id, int(round(knee_pos_f)), args.speed, args.acc)
+                        manager.write_position(knee_id, knee_cmd, args.speed, args.acc)
                         time.sleep(dt)
 
                     # Brief settle in place before moving to next leg
@@ -301,12 +325,13 @@ def main() -> None:
                         else:
                             v2 = (v - hold) / (1.0 - hold)
                             hip_pos_f = lerp(float(place_target_for[hip_id]), float(stance_target_for[hip_id]), v2)
-                        # Slightly lower stance knee to improve support (toward min)
+                        # Slightly lower stance knee to improve support (toward min), within band
                         bias = max(0.0, min(0.5, float(args.stance_knee_bias)))
                         knee_pos_f = float(knee_mid[knee_id]) - bias * (float(knee_mid[knee_id]) - float(knee_min[knee_id]))
+                        knee_cmd = clamp_knee(knee_id, knee_pos_f)
 
                     manager.write_position(hip_id, int(round(hip_pos_f)), args.speed, args.acc)
-                    manager.write_position(knee_id, int(round(knee_pos_f)), args.speed, args.acc)
+                    manager.write_position(knee_id, knee_cmd if 'knee_cmd' in locals() else int(round(knee_pos_f)), args.speed, args.acc)
 
                 time.sleep(dt)
                 t += dt
