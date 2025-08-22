@@ -157,6 +157,7 @@ def main() -> None:
     parser.add_argument("--stance-hold-frac", type=float, default=0.25, help="Hold hips wide for this fraction at start of stance, 0..0.6")
     parser.add_argument("--order", choices=["crawl", "diagonal"], default="diagonal", help="Leg stepping order")
     parser.add_argument("--ranges-file", default=os.path.join(THIS_DIR, "servo_ranges.json"), help="Path to ranges JSON file")
+    parser.add_argument("--gait-mode", choices=["crawl", "trot"], default="crawl", help="Crawl = one leg swing; Trot = diagonal pairs swing together")
     args = parser.parse_args()
 
     # Load ranges
@@ -170,17 +171,27 @@ def main() -> None:
     knee_mid: Dict[int, int] = {sid: int(ranges[sid]["mid"]) for sid in (2, 4, 6, 8)}
     knee_max: Dict[int, int] = {sid: int(ranges[sid]["max"]) for sid in (2, 4, 6, 8)}
 
-    # Build leg order and per-leg phase offsets (ensure only one leg swings at a time)
+    # Build leg order and per-leg phase offsets
     legs = build_leg_order(args.direction, args.order)
     # Enforce swing fraction safety
-    swing_frac = max(0.05, min(0.25, float(args.swing_frac)))
-    # Phase offsets equally spaced across cycle for 4 legs
-    leg_offsets: Dict[Leg, float] = {
-        legs[0]: 0.0,
-        legs[1]: 0.25,
-        legs[2]: 0.50,
-        legs[3]: 0.75,
-    }
+    swing_frac = max(0.05, min(0.40 if args.gait_mode == "trot" else 0.25, float(args.swing_frac)))
+    if args.gait_mode == "trot":
+        # Diagonal pairs swing together: (FL,RR) then (FR,RL)
+        # Use two phases 0.0 and 0.5
+        leg_offsets: Dict[Leg, float] = {
+            (1, 2): 0.0,
+            (7, 8): 0.0,
+            (3, 4): 0.5,
+            (5, 6): 0.5,
+        }
+    else:
+        # Crawl: four phases 0.0, 0.25, 0.5, 0.75
+        leg_offsets = {
+            legs[0]: 0.0,
+            legs[1]: 0.25,
+            legs[2]: 0.50,
+            legs[3]: 0.75,
+        }
 
     manager = ServoManager()
     ok, err = manager.connect(args.port, args.baudrate)
