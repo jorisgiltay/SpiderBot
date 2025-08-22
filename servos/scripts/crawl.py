@@ -47,16 +47,34 @@ def plan_crawl_sequence() -> list:
     ]
 
 
+def safe_write_position(manager: ServoManager, sid: int, pos: int, speed: int, acc: int, retries: int = 3, pause_s: float = 0.05) -> bool:
+    # Ensure torque, try multiple times with small pauses
+    ok, _ = manager.set_torque(sid, True)
+    last_err: str = ""
+    for _ in range(max(1, int(retries))):
+        ok, err = manager.write_position(sid, pos, speed, acc)
+        if ok:
+            return True
+        last_err = err or ""
+        time.sleep(max(0.0, float(pause_s)))
+        # try re-enable torque again before retry
+        manager.set_torque(sid, True)
+    if last_err:
+        print(f"Write position {sid} failed after retries: {last_err}")
+    return False
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Scaffold crawl gait maintaining 3 contact points.")
     parser.add_argument("--port", required=False, help="Serial port (e.g. COM3). If omitted, first detected is used.")
     parser.add_argument("--baud", type=int, default=1_000_000, help="Baudrate (default: 1_000_000)")
-    parser.add_argument("--speed", type=int, default=2200, help="Servo speed (ticks/s)")
-    parser.add_argument("--acc", type=int, default=50, help="Servo acceleration")
+    parser.add_argument("--speed", type=int, default=1200, help="Servo speed (ticks/s)")
+    parser.add_argument("--acc", type=int, default=20, help="Servo acceleration")
     parser.add_argument("--step", type=int, default=120, help="Hip delta ticks per step forward")
     parser.add_argument("--lift", type=int, default=120, help="Knee lift ticks for swing phase")
     parser.add_argument("--cycles", type=int, default=1, help="Number of full crawl cycles")
     parser.add_argument("--pause", type=float, default=0.25, help="Pause between sub-steps (s)")
+    parser.add_argument("--nudges", action="store_true", help="Enable small hip nudges for CoG (off by default)")
     args = parser.parse_args()
 
     ranges = load_servo_ranges()["servos"]
@@ -76,13 +94,18 @@ def main() -> int:
         return 2
 
     try:
+        # Enable torque on all involved servos upfront
+        for sid in hip_ids + knee_ids:
+            manager.set_torque(sid, True)
+        time.sleep(0.05)
+
         # Start from neutral stand
         for sid in hip_ids + knee_ids:
             s = ranges[f"servo{sid}"]
             pos = clamp_ticks(int(s["mid"]), int(s["min"]), int(s["max"]))
-            ok, err = manager.write_position(sid, pos, args.speed, args.acc)
+            ok = safe_write_position(manager, sid, pos, args.speed, args.acc)
             if not ok:
-                print(f"Init {sid} write failed: {err}")
+                print(f"Init {sid} write failed")
         time.sleep(0.5)
 
         sequence = plan_crawl_sequence()
@@ -94,60 +117,61 @@ def main() -> int:
                 # Lift swing leg
                 s_knee = ranges[f"servo{knee}"]
                 knee_lift = clamp_ticks(int(s_knee["mid"]) - int(args.lift), int(s_knee["min"]), int(s_knee["max"]))
-                ok, err = manager.write_position(knee, knee_lift, args.speed, args.acc)
+                ok = safe_write_position(manager, knee, knee_lift, args.speed, args.acc)
                 if not ok:
-                    print(f"Knee lift {knee} failed: {err}")
+                    print(f"Knee lift {knee} failed")
                 time.sleep(args.pause)
 
                 # Advance hip forward
                 s_hip = ranges[f"servo{hip}"]
                 hip_forward = clamp_ticks(int(s_hip["mid"]) + int(args.step), int(s_hip["min"]), int(s_hip["max"]))
-                ok, err = manager.write_position(hip, hip_forward, args.speed, args.acc)
+                ok = safe_write_position(manager, hip, hip_forward, args.speed, args.acc)
                 if not ok:
-                    print(f"Hip advance {hip} failed: {err}")
+                    print(f"Hip advance {hip} failed")
                 time.sleep(args.pause)
 
                 # Lower knee to neutral contact
-                ok, err = manager.write_position(knee, int(s_knee["mid"]), args.speed, args.acc)
+                ok = safe_write_position(manager, knee, int(s_knee["mid"]), args.speed, args.acc)
                 if not ok:
-                    print(f"Knee lower {knee} failed: {err}")
+                    print(f"Knee lower {knee} failed")
                 time.sleep(args.pause)
 
                 # While swing leg moves, consider slight counter-motions on stance hips for CoG centering
                 # Minimal scaffold: nudge the two adjacent hips slightly backward, opposite diagonal slightly forward.
                 # This is a simple placeholder; tune per-mechanics.
-                def nudge(sid: int, delta: int) -> None:
-                    s = ranges[f"servo{sid}"]
-                    tgt = clamp_ticks(int(s["mid"]) + delta, int(s["min"]), int(s["max"]))
-                    ok2, err2 = manager.write_position(sid, tgt, args.speed, args.acc)
-                    if not ok2:
-                        print(f"Nudge {sid} failed: {err2}")
+                if args.nudges:
+                    def nudge(sid: int, delta: int) -> None:
+                        s = ranges[f"servo{sid}"]
+                        tgt = clamp_ticks(int(s["mid"]) + delta, int(s["min"]), int(s["max"]))
+                        ok2 = safe_write_position(manager, sid, tgt, args.speed, args.acc)
+                        if not ok2:
+                            print(f"Nudge {sid} failed")
 
-                if leg == LegIds(1, 2):
-                    nudge(3, -args.step // 6)
-                    nudge(5, -args.step // 6)
-                    nudge(7, +args.step // 8)
-                elif leg == LegIds(7, 8):
-                    nudge(5, -args.step // 6)
-                    nudge(3, -args.step // 6)
-                    nudge(1, +args.step // 8)
-                elif leg == LegIds(3, 4):
-                    nudge(1, -args.step // 6)
-                    nudge(7, -args.step // 6)
-                    nudge(5, +args.step // 8)
-                elif leg == LegIds(5, 6):
-                    nudge(7, -args.step // 6)
-                    nudge(1, -args.step // 6)
-                    nudge(3, +args.step // 8)
+                    if leg == LegIds(1, 2):
+                        nudge(3, -args.step // 6)
+                        nudge(5, -args.step // 6)
+                        nudge(7, +args.step // 8)
+                    elif leg == LegIds(7, 8):
+                        nudge(5, -args.step // 6)
+                        nudge(3, -args.step // 6)
+                        nudge(1, +args.step // 8)
+                    elif leg == LegIds(3, 4):
+                        nudge(1, -args.step // 6)
+                        nudge(7, -args.step // 6)
+                        nudge(5, +args.step // 8)
+                    elif leg == LegIds(5, 6):
+                        nudge(7, -args.step // 6)
+                        nudge(1, -args.step // 6)
+                        nudge(3, +args.step // 8)
 
                 time.sleep(args.pause)
 
         # Return to neutral
         for sid in hip_ids + knee_ids:
             s = ranges[f"servo{sid}"]
-            ok, err = manager.write_position(sid, int(s["mid"]), args.speed, args.acc)
+            ok = safe_write_position(manager, sid, int(s["mid"]), args.speed, args.acc)
             if not ok:
-                print(f"Reset {sid} failed: {err}")
+                print(f"Reset {sid} failed")
         time.sleep(0.4)
         return 0
     finally:
