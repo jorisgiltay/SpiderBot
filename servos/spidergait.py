@@ -102,6 +102,22 @@ def compute_leg_targets_for_direction(
     return stance_target, place_target
 
 
+def scale_hip_targets(
+    hip_low_high: Dict[int, Tuple[int, int]],
+    ranges: Dict[int, Dict[str, int]],
+    scale: float,
+) -> Dict[int, Tuple[int, int]]:
+    """Scale hip sweep around mid by factor (0..1). 1.0 = current, 0.5 = half."""
+    s = max(0.1, min(1.0, float(scale)))
+    out: Dict[int, Tuple[int, int]] = {}
+    for hip_id, (low, high) in hip_low_high.items():
+        mid = int(ranges[hip_id]["mid"])
+        low_s = int(round(mid - s * (mid - int(low))))
+        high_s = int(round(mid + s * (int(high) - mid)))
+        out[hip_id] = (low_s, high_s)
+    return out
+
+
 def move_all_to_neutral(
     manager: ServoManager,
     ranges: Dict[int, Dict[str, int]],
@@ -153,6 +169,7 @@ def main() -> None:
     parser.add_argument("--speed", type=int, default=2600, help="Commanded speed for moves")
     parser.add_argument("--acc", type=int, default=60, help="Commanded acceleration for moves")
     parser.add_argument("--lift-scale", type=float, default=1.0, help="Scale for knee lift (0..1) toward max")
+    parser.add_argument("--hip-swing-scale", type=float, default=0.7, help="Scale hip sweep around mid (0..1). 1.0 ≈ 90° total sweep")
     parser.add_argument("--stance-knee-bias", type=float, default=0.15, help="Lower stance knees by this fraction of (mid-min), 0..0.5")
     parser.add_argument("--stance-hold-frac", type=float, default=0.25, help="Hold hips wide for this fraction at start of stance, 0..0.6")
     parser.add_argument("--order", choices=["crawl", "diagonal"], default="diagonal", help="Leg stepping order")
@@ -165,6 +182,8 @@ def main() -> None:
     # Validate all 8 servos present
     ensure_all_present(ranges, [1, 2, 3, 4, 5, 6, 7, 8])
     hip_low_high = compute_hip_low_high(ranges)
+    # Optionally scale hip sweep amplitude
+    hip_low_high = scale_hip_targets(hip_low_high, ranges, args.hip_swing_scale)
 
     # Knee min/mid/max maps
     knee_min: Dict[int, int] = {sid: int(ranges[sid]["min"]) for sid in (2, 4, 6, 8)}
