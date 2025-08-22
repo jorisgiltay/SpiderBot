@@ -116,7 +116,7 @@ def main() -> int:
 
                 # Lift swing leg
                 s_knee = ranges[f"servo{knee}"]
-                knee_lift = clamp_ticks(int(s_knee["mid"]) - int(args.lift), int(s_knee["min"]), int(s_knee["max"]))
+                knee_lift = -clamp_ticks(int(s_knee["mid"]) - int(args.lift), int(s_knee["min"]), int(s_knee["max"]))
                 ok = safe_write_position(manager, knee, knee_lift, args.speed, args.acc)
                 if not ok:
                     print(f"Knee lift {knee} failed")
