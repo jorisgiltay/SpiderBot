@@ -78,13 +78,14 @@ def ease_in_out_sine(u: float) -> float:
 def compute_leg_targets_for_direction(
     hip_low_high: Dict[int, Tuple[int, int]],
     direction: str,
+    reversed_hips: List[int],
 ) -> Tuple[Dict[int, int], Dict[int, int]]:
     """Return (stance_target, place_target) per hip based on direction."""
     stance_target: Dict[int, int] = {}
     place_target: Dict[int, int] = {}
-    reversed_hips = {3, 7}  # invert swing direction for these hips
+    reversed_set = set(reversed_hips)
     for hip_id, (low, high) in hip_low_high.items():
-        if hip_id in reversed_hips:
+        if hip_id in reversed_set:
             # Swap mapping for reversed hips
             if direction == "forward":
                 stance_target[hip_id] = high
@@ -244,6 +245,8 @@ def main() -> None:
     parser.add_argument("--knee-link-mm", type=float, default=81.0, help="Knee→foot effective length (mm)")
     parser.add_argument("--hip-height-mm", type=float, default=60.0, help="Desired hip height above ground during stance (mm)")
     parser.add_argument("--knee-sign", type=int, choices=[-1,1], default=1, help="+1 or -1 mapping from knee angle to ticks")
+    parser.add_argument("--knee-sign-override", type=str, default="", help="Per-knee overrides like 2:-1,4:-1 (comma-separated)")
+    parser.add_argument("--reverse-hips", type=str, default="3,7", help="Comma-separated hip IDs with reversed swing direction")
     parser.add_argument("--order", choices=["crawl", "diagonal"], default="diagonal", help="Leg stepping order")
     parser.add_argument("--ranges-file", default=os.path.join(THIS_DIR, "servo_ranges.json"), help="Path to ranges JSON file")
     parser.add_argument("--gait-mode", choices=["crawl", "trot"], default="crawl", help="Crawl = one leg swing; Trot = diagonal pairs swing together")
@@ -323,7 +326,16 @@ def main() -> None:
                 pass
 
         # Targets for direction
-        stance_target_for, place_target_for = compute_leg_targets_for_direction(hip_low_high, args.direction)
+        # Parse reversed hips from CLI
+        rev_hips: List[int] = []
+        if args.reverse_hips.strip():
+            for tok in args.reverse_hips.split(","):
+                tok = tok.strip()
+                if tok.isdigit():
+                    rev_hips.append(int(tok))
+        if not rev_hips:
+            rev_hips = [3, 7]
+        stance_target_for, place_target_for = compute_leg_targets_for_direction(hip_low_high, args.direction, rev_hips)
 
         # Initialize to stance positions with knees mid (clamped to band)
         for hip_id in (1, 3, 5, 7):
@@ -400,10 +412,25 @@ def main() -> None:
                         bias = max(0.0, min(0.5, float(args.stance_knee_bias)))
                         stance_knee_f = float(knee_mid[knee_id]) - bias * (float(knee_mid[knee_id]) - float(knee_min[knee_id]))
                         if args.ik_stance:
+                            # Per-knee sign override
+                            knee_sign = int(args.knee_sign)
+                            if args.knee_sign_override:
+                                for pair in args.knee_sign_override.split(","):
+                                    pair = pair.strip()
+                                    if not pair:
+                                        continue
+                                    if ":" in pair:
+                                        k_str, s_str = pair.split(":", 1)
+                                        if k_str.strip().isdigit():
+                                            if int(k_str.strip()) == int(knee_id):
+                                                try:
+                                                    knee_sign = int(s_str.strip())
+                                                except Exception:
+                                                    pass
                             knee_cmd = knee_ik_ticks(
                                 hip_ticks=int(round(hip_pos_f)),
                                 knee_mid_ticks=int(knee_mid[knee_id]),
-                                knee_sign=int(args.knee_sign),
+                                knee_sign=knee_sign,
                                 hip_mid_ticks=int(ranges[hip_id]["mid"]),
                                 hip_link_mm=float(args.hip_link_mm),
                                 knee_link_mm=float(args.knee_link_mm),
