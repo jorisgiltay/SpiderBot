@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ST3215-HS Servo Web Interface</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script defer src="/static/app.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: Inter, system-ui, Segoe UI, Roboto, Arial, sans-serif; }
+  </style>
+  </head>
+<body>
+  <div class="container">
+    <header class="hero">
+      <div class="hero-inner">
+        <h1>ST3215-HS Servo Wizard</h1>
+        <p>Scan, read, visualize, and configure servos over serial.</p>
+      </div>
+    </header>
+
+    <section class="card">
+      <h2>Connection</h2>
+      <div class="row">
+        <label>Port</label>
+        <select id="portSelect"></select>
+        <button id="refreshPorts">Refresh</button>
+      </div>
+      <div class="row">
+        <label>Baudrate</label>
+        <input id="baudInput" type="number" value="1000000" />
+      </div>
+      <div class="row">
+        <button id="connectBtn" class="accent">Connect</button>
+        <button id="disconnectBtn">Disconnect</button>
+        <span id="connStatus" class="status">Not connected</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Discovery</h2>
+      <div class="row">
+        <label>Scan IDs</label>
+        <input id="scanStart" type="number" value="1" />
+        <input id="scanEnd" type="number" value="30" />
+        <button id="scanBtn">Scan</button>
+      </div>
+      <div class="row">
+        <div id="servoTabs" class="tabs"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="split">
+        <div class="left">
+          <div class="subtabs">
+            <button data-tab="eprom" class="subtab active">EPROM</button>
+            <button data-tab="sram" class="subtab">SRAM</button>
+            <button data-tab="commands" class="subtab">Commands</button>
+          </div>
+
+          <div class="row units-row">
+            <label>Units</label>
+            <select id="unitMode">
+              <option value="ticks">Native (ticks)</option>
+              <option value="deg">Degrees (deg / deg/s / deg/s²)</option>
+            </select>
+          </div>
+
+          <div id="tab-eprom" class="tab-panel active">
+            <div class="vlist">
+              <label>ID <input id="eprom_id" type="number" /></label>
+              <label>Baud (enum 0..7) <input id="eprom_baud" type="number" min="0" max="7" /></label>
+              <label>Min Angle <input id="eprom_min" type="number" /></label>
+              <label>Max Angle <input id="eprom_max" type="number" /></label>
+              <label>CW Deadband <input id="eprom_cw_dead" type="number" /></label>
+              <label>CCW Deadband <input id="eprom_ccw_dead" type="number" /></label>
+              <label>Offset <input id="eprom_offset" type="number" /></label>
+              <label>Mode <input id="eprom_mode" type="number" /></label>
+            </div>
+            <div class="row">
+              <button id="saveParams" class="accent">Save EPROM/SRAM</button>
+            </div>
+          </div>
+
+          <div id="tab-sram" class="tab-panel">
+            <div class="vlist">
+              <label>Torque Enable <input id="sram_torque" type="checkbox" /></label>
+              <label>Accel <input id="sram_acc" type="number" /></label>
+              <label>Goal Position <input id="sram_goal_pos" type="number" /></label>
+              <label>Goal Time <input id="sram_goal_time" type="number" /></label>
+              <label>Goal Speed <input id="sram_goal_speed" type="number" /></label>
+              <label>Lock EPROM <input id="sram_lock" type="checkbox" /></label>
+            </div>
+            <div class="row">
+              <button id="saveParams2">Save SRAM</button>
+            </div>
+          </div>
+
+          <div id="tab-commands" class="tab-panel">
+            <div class="vlist">
+              <div class="row">
+                <label>Position</label>
+                <input id="cmd_pos" type="number" value="0" min="0" max="4095" placeholder="0–4095" />
+                <input id="cmd_speed" type="number" value="2400" min="0" max="4095" placeholder="speed 0–4095" />
+                <input id="cmd_acc" type="number" value="100" min="0" max="255" placeholder="acc 0–255" />
+                <button id="sendPos">Send</button>
+                <small id="hintPos" class="hint">Pos 0–4095, Speed 0–4095, Acc 0–255</small>
+              </div>
+              <div class="row">
+                <label>Wheel Speed</label>
+                <input id="cmd_wheel_speed" type="number" value="0" min="-4095" max="4095" placeholder="-4095…4095" />
+                <input id="cmd_wheel_acc" type="number" value="100" min="0" max="255" placeholder="acc 0–255" />
+                <button id="sendWheel">Send</button>
+                <small id="hintWheel" class="hint">Speed −4095…4095 (neg = reverse), Acc 0–255</small>
+              </div>
+              <div class="row">
+                <label>Torque</label>
+                <button id="torqueOn">On</button>
+                <button id="torqueOff">Off</button>
+              </div>
+              <div class="row">
+                <label>Lock EPROM</label>
+                <button id="lockOn">Lock</button>
+                <button id="lockOff">Unlock</button>
+              </div>
+              <div class="row">
+                <label>Change ID</label>
+                <input id="newId" type="number" />
+                <button id="changeId">Apply</button>
+              </div>
+              <div class="row">
+                <label>Change Baud</label>
+                <select id="baudKey">
+                  <option value="1M">1M</option>
+                  <option value="0_5M">0.5M</option>
+                  <option value="250K">250K</option>
+                  <option value="128K">128K</option>
+                  <option value="115200">115200</option>
+                  <option value="76800">76800</option>
+                  <option value="57600">57600</option>
+                  <option value="38400">38400</option>
+                </select>
+                <button id="changeBaud">Apply</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="right status-panel">
+          <h2 class="tight">Status</h2>
+          <div class="viz">
+            <canvas id="servoCanvas" width="420" height="260"></canvas>
+            <div class="vcontrols">
+              <label><input type="checkbox" id="autoUpdate" checked /> Auto update (fast)</label>
+              <button id="refreshStatus">Refresh Now</button>
+              <div class="legend"><span class="swatch green"></span> Actual</div>
+              <div class="legend"><span class="swatch red"></span> Setpoint</div>
+            </div>
+          </div>
+          <pre id="statusPre">{}</pre>
+        </div>
+      </div>
+    </section>
+
+    <footer>
+      <small>Waveshare ST3215-HS Web Wizard</small>
+    </footer>
+  </div>
+</body>
+</html>
+
+
