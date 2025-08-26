@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SpiderBot Controls</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script defer src="/static/controls.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: Inter, system-ui, Segoe UI, Roboto, Arial, sans-serif; }
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 12px; align-items: center; justify-items: center; }
+    .pad { width: 260px; margin: 12px auto; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr); gap: 8px; }
+    .pad button { height: 56px; }
+    .vh { display: flex; gap: 8px; align-items: center; }
+    .vh input[type="range"]{ width: 220px; }
+    .small { color: #94a3b8; font-size: 12px; }
+  </style>
+  </head>
+<body>
+  <div class="container">
+    <header class="hero">
+      <div class="hero-inner">
+        <h1>SpiderBot Motion Controls</h1>
+        <p>Connect, then drive the bot: forward/back/left/right and set height.</p>
+      </div>
+    </header>
+
+    <section class="card">
+      <h2>Connection</h2>
+      <div class="row">
+        <label>Port</label>
+        <select id="portSelect"></select>
+        <button id="refreshPorts">Refresh</button>
+      </div>
+      <div class="row">
+        <label>Baudrate</label>
+        <input id="baudInput" type="number" value="1000000" />
+      </div>
+      <div class="row">
+        <button id="connectBtn" class="accent">Connect</button>
+        <button id="disconnectBtn">Disconnect</button>
+        <span id="connStatus" class="status">Not connected</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Drive</h2>
+      <div class="row">
+        <div class="pad">
+          <span></span>
+          <button id="btnForward" class="accent">Forward</button>
+          <span></span>
+          <button id="btnLeft">Left</button>
+          <button id="btnStop" class="danger">Stop</button>
+          <button id="btnRight">Right</button>
+          <span></span>
+          <button id="btnBackward">Backward</button>
+          <span></span>
+        </div>
+      </div>
+      <div class="row">
+        <label>Speed (ticks/s)</label>
+        <input id="driveSpeed" type="number" value="2400" />
+        <label>Acc</label>
+        <input id="driveAcc" type="number" value="50" />
+        <label>Stride (s)</label>
+        <input id="driveStride" type="number" value="0.8" step="0.05" />
+      </div>
+      <div class="row">
+        <label>Step (mm)</label>
+        <input id="driveStep" type="number" value="18" step="1" />
+        <label>Lift (mm)</label>
+        <input id="driveLift" type="number" value="8" step="1" />
+        <label>Height (mm)</label>
+        <input id="driveHeight" type="number" value="20" step="1" />
+      </div>
+      <div class="row small">Left/Right bias turning scales step asymmetrically across sides.</div>
+    </section>
+
+    <section class="card">
+      <h2>Height</h2>
+      <div class="row vh">
+        <button id="btnDown">Down</button>
+        <input id="heightRange" type="range" min="0" max="60" value="20" />
+        <button id="btnUp">Up</button>
+        <span id="heightLabel" class="small">20 mm</span>
+      </div>
+      <div class="row">
+        <button id="applyHeight" class="accent">Apply Height</button>
+      </div>
+    </section>
+
+    <footer>
+      <small>SpiderBot Controls</small>
+    </footer>
+  </div>
+</body>
+</html>
+
+

@@ -2,16 +2,23 @@
 import threading
 from flask import Flask, jsonify, request, render_template, send_from_directory
 from servo_manager import ServoManager, BaudRateMap
+from motion_controller import MotionController
 
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 manager_lock = threading.Lock()
 servo_manager = ServoManager()
+motion_controller = MotionController(servo_manager, manager_lock)
 
 
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/controls")
+def controls():
+    return render_template("controls.html")
 
 
 @app.get("/api/ports")
@@ -142,6 +149,35 @@ def command_baud(servo_id: int):
         return jsonify({"ok": False, "error": "Invalid baud_key"}), 400
     with manager_lock:
         ok, err = servo_manager.change_baud(servo_id, baud_key)
+    return jsonify({"ok": ok, "error": err})
+
+
+# ---------------- Motion control endpoints ----------------
+@app.post("/api/motion/start")
+def motion_start():
+    p = request.get_json(silent=True) or {}
+    mode = p.get("mode")
+    params = p.get("params") or {}
+    ok, err = motion_controller.start_gait(str(mode), params)
+    return jsonify({"ok": ok, "error": err, "mode": motion_controller.current_mode()})
+
+
+@app.post("/api/motion/stop")
+def motion_stop():
+    motion_controller.stop()
+    return jsonify({"ok": True})
+
+
+@app.post("/api/motion/height")
+def motion_height():
+    p = request.get_json(silent=True) or {}
+    try:
+        height = float(p.get("height", 20.0))
+        speed = int(p.get("speed", 2400))
+        acc = int(p.get("acc", 50))
+    except Exception:
+        return jsonify({"ok": False, "error": "Invalid parameters"}), 400
+    ok, err = motion_controller.set_height(height, speed, acc)
     return jsonify({"ok": ok, "error": err})
 
 
