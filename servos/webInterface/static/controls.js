@@ -63,6 +63,8 @@ window.addEventListener('DOMContentLoaded', ()=>{
   qs('btnBackward').addEventListener('click', ()=> startMode('backward'));
   qs('btnLeft').addEventListener('click', ()=> startMode('left'));
   qs('btnRight').addEventListener('click', ()=> startMode('right'));
+  const pl = document.getElementById('btnPivotLeft'); if(pl) pl.addEventListener('click', ()=> startMode('pivot_left'));
+  const pr = document.getElementById('btnPivotRight'); if(pr) pr.addEventListener('click', ()=> startMode('pivot_right'));
   qs('btnStop').addEventListener('click', stopMode);
 
   qs('applyHeight').addEventListener('click', applyHeight);
@@ -73,6 +75,8 @@ window.addEventListener('DOMContentLoaded', ()=>{
     hr.addEventListener('input', sync);
     sync();
   }
+  const up = document.getElementById('btnUp'); if(up){ up.addEventListener('click', ()=>{ const hr = qs('heightRange'); hr.value = String(Math.min(60, parseFloat(hr.value||'0')+2)); qs('applyHeight').click(); }); }
+  const down = document.getElementById('btnDown'); if(down){ down.addEventListener('click', ()=>{ const hr = qs('heightRange'); hr.value = String(Math.max(0, parseFloat(hr.value||'0')-2)); qs('applyHeight').click(); }); }
 
   loadPorts();
 });

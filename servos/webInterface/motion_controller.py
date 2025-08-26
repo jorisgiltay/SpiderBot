@@ -31,7 +31,11 @@ class MotionController:
         return self.mode if self.is_running() else None
 
     def start_gait(self, mode: str, params: Optional[Dict] = None) -> Tuple[bool, Optional[str]]:
-        if mode not in ("forward", "backward", "left", "right"):
+        # Modes:
+        #  - forward, backward
+        #  - left, right         -> crab left/right (strafe)
+        #  - pivot_left, pivot_right -> on-spot rotation
+        if mode not in ("forward", "backward", "left", "right", "pivot_left", "pivot_right"):
             return False, "Invalid mode"
         if not self.servo_manager.is_connected:
             return False, "Not connected"
@@ -114,8 +118,12 @@ class MotionController:
             return 0, 2048, 4095
 
     def _side_sign_for_hip(self, hip_id: int) -> int:
-        # Invert right hips (3 and 7) to align directions across sides
+        # Invert right hips (3 and 7) to align directions across sides for forward/back/pivot
         return -1 if hip_id in (3, 7) else 1
+
+    def _frontrear_sign_for_hip(self, hip_id: int) -> int:
+        # Invert rear hips (5 and 7) to align directions across front vs rear for crab (sideways)
+        return -1 if hip_id in (5, 7) else 1
 
     def _hip_step_ticks(self, hip_id: int, step_mm: float, hip_mm_range: float) -> int:
         hmin, hmid, hmax = self._hip_bounds(hip_id)
@@ -138,14 +146,9 @@ class MotionController:
         step_mm = float(self.params.get("step", 18.0))
         stride_time = max(0.2, float(self.params.get("stride_time", 0.8)))
         hip_mm_range = float(self.params.get("hip_mm_range", 35.0))
-        # Turn bias: multiplies step on each side to curve
-        # For left: left 0.6x, right 1.4x ; For right: vice-versa
+        # Step magnitude (no turn bias by default)
         left_bias = 1.0
         right_bias = 1.0
-        if self.mode == "left":
-            left_bias, right_bias = 0.6, 1.4
-        elif self.mode == "right":
-            left_bias, right_bias = 1.4, 0.6
 
         # Servos mapping
         FL = (1, 2)
@@ -181,12 +184,33 @@ class MotionController:
 
         step_T = stride_time / 4.0
 
+        # Per-leg forward/backward mapping
+        # forward=True means stance moves foot backward relative to body
+        if self.mode == "forward":
+            per_leg_forward = {1: True, 3: True, 5: True, 7: True}
+        elif self.mode == "backward":
+            per_leg_forward = {1: False, 3: False, 5: False, 7: False}
+        elif self.mode == "pivot_left":
+            # Left side opposite of right side to rotate left
+            per_leg_forward = {1: False, 5: False, 3: True, 7: True}
+        elif self.mode == "pivot_right":
+            per_leg_forward = {1: True, 5: True, 3: False, 7: False}
+        elif self.mode == "left":  # crab left
+            # Use uniform direction but flip sign by front/rear axis in kinematics
+            per_leg_forward = {1: False, 3: False, 5: False, 7: False}
+        else:  # "right" crab right
+            per_leg_forward = {1: True, 3: True, 5: True, 7: True}
+
         def stance_phase(hip_id: int, knee_id: int, forward: bool) -> None:
             hmin, hmid, hmax = self._hip_bounds(hip_id)
             base = hmid
             step = hip_steps[hip_id]
-            side_sign = self._side_sign_for_hip(hip_id)
-            signed_step = side_sign * step
+            # Choose sign scheme: forward/back/pivot use left/right inversion; crab uses front/rear inversion
+            if self.mode in ("left", "right"):
+                sign = self._frontrear_sign_for_hip(hip_id)
+            else:
+                sign = self._side_sign_for_hip(hip_id)
+            signed_step = sign * step
             if forward:
                 target = self._clamp_ticks(base - signed_step, hmin, hmax)
             else:
@@ -199,8 +223,11 @@ class MotionController:
             hmin, hmid, hmax = self._hip_bounds(hip_id)
             base = hmid
             step = hip_steps[hip_id]
-            side_sign = self._side_sign_for_hip(hip_id)
-            signed_step = side_sign * step
+            if self.mode in ("left", "right"):
+                sign = self._frontrear_sign_for_hip(hip_id)
+            else:
+                sign = self._side_sign_for_hip(hip_id)
+            signed_step = sign * step
             if forward:
                 target = self._clamp_ticks(base + signed_step, hmin, hmax)
             else:
@@ -217,9 +244,6 @@ class MotionController:
                 self.servo_manager.write_position(sid, pos, speed, acc)
         time.sleep(0.4)
 
-        # Direction flag
-        forward_flag = True if self.mode in ("forward", "left", "right") else False
-
         # Sequence
         leg_sequence = [FL, RR, FR, RL]
         try:
@@ -230,8 +254,8 @@ class MotionController:
                     with self.manager_lock:
                         for (hip_id, knee_id) in [FL, RR, FR, RL]:
                             if hip_id != swing_hip:
-                                stance_phase(hip_id, knee_id, forward=forward_flag)
-                        swing_phase(swing_hip, swing_knee, forward=forward_flag)
+                                stance_phase(hip_id, knee_id, forward=per_leg_forward[hip_id])
+                        swing_phase(swing_hip, swing_knee, forward=per_leg_forward[swing_hip])
         finally:
             # Return to neutral at the end
             with self.manager_lock:
