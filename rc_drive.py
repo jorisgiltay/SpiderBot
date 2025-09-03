@@ -168,6 +168,7 @@ def main() -> int:
     parser.add_argument("--on-threshold", type=int, default=1600, help="Activation ON threshold (ch10)")
     parser.add_argument("--off-threshold", type=int, default=1400, help="Activation OFF threshold (ch10)")
     parser.add_argument("--rate-hz", type=float, default=30.0, help="Polling rate in Hz for MSP RC")
+    parser.add_argument("--log-rc", action="store_true", help="Print RC channel values each loop")
     args = parser.parse_args()
 
     # Setup servo manager and motion controller
@@ -214,6 +215,10 @@ def main() -> int:
             time.sleep(0.01)
             resp = read_msp_response(msp)
             channels = parse_msp_rc(resp)
+            if args.log_rc and channels:
+                # Print as ch:index=value for first N channels received
+                parts = [f"ch{i}={v}" for i, v in enumerate(channels)]
+                print("RC:", " ".join(parts))
             intent = interpreter.interpret(channels)
             if intent is None:
                 time.sleep(rate_dt)
