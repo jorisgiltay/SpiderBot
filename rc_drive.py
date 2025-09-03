@@ -25,17 +25,19 @@ def build_msp_request(command: int, payload: bytes = b"") -> bytes:
     return header + size_b + cmd_b + payload + csum_b
 
 
-def read_msp_response(ser: serial.Serial, expected_payload_size: int = 16, timeout_s: float = 0.2) -> bytes:
+def read_msp_response(ser: serial.Serial, expected_payload_size: int = 16) -> bytes:
+    # Match poll_stick.py behavior: read bytes up to expected size + header
     data = b""
-    start = time.time()
+    start_time = time.time()
     while len(data) < expected_payload_size + 5:
-        if time.time() - start > timeout_s:
+        if time.time() - start_time > 0.2:
             break
         data += ser.read(ser.in_waiting or 1)
     return data
 
 
 def parse_msp_rc(response: bytes) -> List[int]:
+    # Match poll_stick.py: extract size at [3], payload starts at [5]
     if len(response) < 5:
         return []
     size = response[3]
