@@ -25,15 +25,20 @@ def build_msp_request(command: int, payload: bytes = b"") -> bytes:
     return header + size_b + cmd_b + payload + csum_b
 
 
-def read_msp_response(ser: serial.Serial, expected_payload_size: int = 16) -> bytes:
-    # Match poll_stick.py behavior: read bytes up to expected size + header
-    data = b""
+def read_msp_response(ser: serial.Serial, timeout_s: float = 0.2) -> bytes:
+    # Read until we find a full MSP frame ('$M>' + size + cmd + payload + checksum)
+    buf = bytearray()
     start_time = time.time()
-    while len(data) < expected_payload_size + 5:
-        if time.time() - start_time > 0.2:
-            break
-        data += ser.read(ser.in_waiting or 1)
-    return data
+    while time.time() - start_time < timeout_s:
+        buf += ser.read(ser.in_waiting or 1)
+        # Look for header
+        idx = buf.find(b"$M>")
+        if idx != -1 and len(buf) >= idx + 5:
+            size = buf[idx + 3]
+            total_len = 3 + 1 + 1 + size + 1  # header + size + cmd + payload + checksum
+            if len(buf) >= idx + total_len:
+                return bytes(buf[idx: idx + total_len])
+    return bytes(buf)
 
 
 def parse_msp_rc(response: bytes) -> List[int]:
@@ -207,6 +212,11 @@ def main() -> int:
     try:
         while True:
             try:
+                # Flush any pending bytes to avoid mixing old/new frames
+                try:
+                    msp.reset_input_buffer()
+                except Exception:
+                    pass
                 pkt = build_msp_request(MSP_RC)
                 msp.write(pkt)
             except Exception:
