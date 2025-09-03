@@ -216,9 +216,8 @@ def main() -> int:
             resp = read_msp_response(msp)
             channels = parse_msp_rc(resp)
             if args.log_rc and channels:
-                # Print as ch:index=value for first N channels received
-                parts = [f"ch{i}={v}" for i, v in enumerate(channels)]
-                print("RC:", " ".join(parts))
+                # Match poll_stick.py style: print the list directly
+                print("RC Channels:", channels)
             intent = interpreter.interpret(channels)
             if intent is None:
                 time.sleep(rate_dt)
