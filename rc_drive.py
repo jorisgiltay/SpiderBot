@@ -254,10 +254,13 @@ def main() -> int:
             # Active
             was_active = True
 
-            # Height management: if gait is running and height changed, restart gait with new params
+            # Height management: update on-the-fly without restarting
             if last_height_cmd is None or abs(intent.height_mm - last_height_cmd) >= float(args.height_hysteresis):
-                # If a gait is running, we will (re)start it below with updated params
                 last_height_cmd = intent.height_mm
+                try:
+                    controller.update_height(last_height_cmd)
+                except Exception:
+                    pass
 
             # Choose or stop gait depending on mode determination
             desired_mode = intent.mode
@@ -288,21 +291,8 @@ def main() -> int:
                     else:
                         last_mode = desired_mode
                 else:
-                    # Same gait still running: if height changed, restart with new height param
-                    # to apply updated base height inside gait loop
-                    if last_height_cmd is not None:
-                        params = {
-                            "speed": int(args.speed),
-                            "acc": int(args.acc),
-                            "height": float(last_height_cmd),
-                            "lift": float(args.lift),
-                            "step": float(args.step),
-                            "stride_time": float(args.stride_time),
-                            "hip_mm_range": float(args.hip_mm_range),
-                        }
-                        controller.stop()
-                        time.sleep(0.05)
-                        controller.start_gait(desired_mode, params)
+                    # Same gait running; height is already updated on-the-fly
+                    pass
 
             time.sleep(rate_dt)
     except KeyboardInterrupt:

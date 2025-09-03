@@ -22,6 +22,7 @@ class MotionController:
         self.mode: Optional[str] = None  # 'forward' | 'backward' | 'left' | 'right'
         self.params: Dict = {}
         self.ranges = self._load_servo_ranges().get("servos", {})
+        self._params_lock = threading.Lock()
 
     # ---------- Public API ----------
     def is_running(self) -> bool:
@@ -46,7 +47,8 @@ class MotionController:
             time.sleep(0.05)
 
         self.mode = mode
-        self.params = params or {}
+        with self._params_lock:
+            self.params = params or {}
         self.stop_event.clear()
         self.thread = threading.Thread(target=self._run_loop, name=f"gait-{mode}", daemon=True)
         self.thread.start()
@@ -55,9 +57,17 @@ class MotionController:
     def stop(self) -> None:
         self.stop_event.set()
         if self.thread and self.thread.is_alive():
-            self.thread.join(timeout=2.0)
+            # Short join to avoid UI delays; thread will finish cleanup
+            self.thread.join(timeout=0.2)
         self.thread = None
         self.mode = None
+
+    def update_height(self, height_mm: float) -> None:
+        # Update desired gait height without restarting the thread
+        with self._params_lock:
+            if not self.params:
+                self.params = {}
+            self.params["height"] = float(height_mm)
 
     def set_height(self, height_mm: float, speed: int = 2400, acc: int = 50) -> Tuple[bool, Optional[str]]:
         if not self.servo_manager.is_connected:
@@ -139,13 +149,14 @@ class MotionController:
 
     def _run_loop(self) -> None:
         # Parameters with defaults
-        speed = int(self.params.get("speed", 2400))
-        acc = int(self.params.get("acc", 50))
-        base_height = float(self.params.get("height", 20.0))
-        lift_mm = float(self.params.get("lift", 8.0))
-        step_mm = float(self.params.get("step", 18.0))
-        stride_time = max(0.2, float(self.params.get("stride_time", 0.8)))
-        hip_mm_range = float(self.params.get("hip_mm_range", 35.0))
+        with self._params_lock:
+            speed = int(self.params.get("speed", 2400))
+            acc = int(self.params.get("acc", 50))
+            start_height = float(self.params.get("height", 20.0))
+            lift_mm = float(self.params.get("lift", 8.0))
+            step_mm = float(self.params.get("step", 18.0))
+            stride_time = max(0.2, float(self.params.get("stride_time", 0.8)))
+            hip_mm_range = float(self.params.get("hip_mm_range", 35.0))
         # Step magnitude (no turn bias by default)
         left_bias = 1.0
         right_bias = 1.0
@@ -159,13 +170,13 @@ class MotionController:
         # Neutral pose
         neutral = {
             1: self._servo_mid(1),
-            2: self._knee_for_height(2, base_height),
+            2: self._knee_for_height(2, start_height),
             3: self._servo_mid(3),
-            4: self._knee_for_height(4, base_height),
+            4: self._knee_for_height(4, start_height),
             5: self._servo_mid(5),
-            6: self._knee_for_height(6, base_height),
+            6: self._knee_for_height(6, start_height),
             7: self._servo_mid(7),
-            8: self._knee_for_height(8, base_height),
+            8: self._knee_for_height(8, start_height),
         }
 
         # Precompute step ticks per hip with bias per side
@@ -201,6 +212,10 @@ class MotionController:
         else:  # "right" crab right
             per_leg_forward = {1: True, 3: True, 5: True, 7: True}
 
+        def current_height() -> float:
+            with self._params_lock:
+                return float(self.params.get("height", start_height))
+
         def stance_phase(hip_id: int, knee_id: int, forward: bool) -> None:
             hmin, hmid, hmax = self._hip_bounds(hip_id)
             base = hmid
@@ -215,11 +230,12 @@ class MotionController:
                 target = self._clamp_ticks(base - signed_step, hmin, hmax)
             else:
                 target = self._clamp_ticks(base + signed_step, hmin, hmax)
-            self._write_leg(hip_id, knee_id, target, self._knee_for_height(knee_id, base_height), speed, acc)
+            self._write_leg(hip_id, knee_id, target, self._knee_for_height(knee_id, current_height()), speed, acc)
 
         def swing_phase(hip_id: int, knee_id: int, forward: bool) -> None:
-            base_knee = self._knee_for_height(knee_id, base_height)
-            lift_knee = self._knee_for_height(knee_id, max(0.0, base_height - lift_mm))
+            h_now = current_height()
+            base_knee = self._knee_for_height(knee_id, h_now)
+            lift_knee = self._knee_for_height(knee_id, max(0.0, h_now - lift_mm))
             hmin, hmid, hmax = self._hip_bounds(hip_id)
             base = hmid
             step = hip_steps[hip_id]
