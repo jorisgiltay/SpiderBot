@@ -122,11 +122,14 @@ class RCInterpreter:
         self._active_state = False
 
     def _activation(self, val: int) -> bool:
+        # Inverted logic: low = ON, high = OFF (with hysteresis)
         if self._active_state:
-            if val <= self.off_threshold:
+            # Turn off when channel rises high
+            if val >= self.on_threshold:
                 self._active_state = False
         else:
-            if val >= self.on_threshold:
+            # Turn on when channel falls low
+            if val <= self.off_threshold:
                 self._active_state = True
         return self._active_state
 
