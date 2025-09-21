@@ -142,17 +142,18 @@ class BalanceController:
             return 2048
     
     def _knee_for_height(self, sid: int, height_mm: float) -> int:
-        """Convert height in mm to knee servo position - EXACT copy from MotionController."""
+        """Convert height in mm to knee servo position - INVERTED for balance control."""
         s = self.ranges.get(f"servo{sid}", {})
         try:
             base_mid = int(s["mid"]) ; smin = int(s["min"]) ; smax = int(s["max"]) 
         except Exception:
             base_mid, smin, smax = 2048, 0, 4095
-        # mapping: 0mm -> max_ticks (low), 60mm -> base_mid (high)
+        # INVERTED mapping for balance: 0mm -> base_mid (low), 60mm -> smin (high)
+        # This is the inverse of MotionController: 0mm -> smax, 60mm -> base_mid
         max_height_mm = 60.0
         h = max(0.0, min(max_height_mm, float(height_mm)))
         t = h / max_height_mm
-        target = int(round((1.0 - t) * smax + t * base_mid))
+        target = int(round(base_mid + t * (smin - base_mid)))
         return self._clamp_ticks(target, smin, smax)
     
     def _hip_for_height(self, sid: int, height_mm: float) -> int:
