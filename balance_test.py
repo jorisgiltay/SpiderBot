@@ -104,7 +104,7 @@ class BalanceController:
         self.base_height_mm = 40.0  # Base height when level
         self.max_adjustment_mm = 20.0  # Maximum height adjustment per leg
         self.sensitivity = 2.5  # How aggressively to correct (0.0 to 5.0)
-        self.deadband_deg = 0.5  # Don't adjust if tilt is less than this
+        self.deadband_deg = 1.5  # Don't adjust if tilt is less than this
         
         # Servo control parameters
         self.speed = 2500  # Faster for more responsive balance adjustments
@@ -246,7 +246,7 @@ def main() -> int:
     parser.add_argument("--base-height", type=float, default=40.0, help="Base height in mm when level")
     parser.add_argument("--max-adjustment", type=float, default=20.0, help="Maximum height adjustment per leg (mm)")
     parser.add_argument("--sensitivity", type=float, default=2.5, help="Balance sensitivity (0.0 to 5.0)")
-    parser.add_argument("--deadband", type=float, default=0.5, help="Deadband in degrees (no adjustment below this)")
+    parser.add_argument("--deadband", type=float, default=1.5, help="Deadband in degrees (no adjustment below this)")
     parser.add_argument("--rate", type=float, default=20.0, help="Update rate in Hz")
     parser.add_argument("--speed", type=int, default=2500, help="Servo speed for balance adjustments")
     parser.add_argument("--acc", type=int, default=30, help="Servo acceleration for balance adjustments")
