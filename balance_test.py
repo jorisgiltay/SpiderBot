@@ -129,33 +129,31 @@ class BalanceController:
         except Exception:
             return {}
     
+    def _clamp_ticks(self, val: int, smin: int, smax: int) -> int:
+        """Clamp servo position to valid range - EXACT copy from MotionController."""
+        return max(smin, min(smax, val))
+
     def _servo_mid(self, sid: int) -> int:
-        """Get servo midpoint position."""
+        """Get servo midpoint position - EXACT copy from MotionController."""
         s = self.ranges.get(f"servo{sid}", {})
         try:
-            return int(s["mid"])
+            return self._clamp_ticks(int(s["mid"]), int(s["min"]), int(s["max"]))
         except Exception:
             return 2048
     
     def _knee_for_height(self, sid: int, height_mm: float) -> int:
-        """Convert height in mm to knee servo position."""
+        """Convert height in mm to knee servo position - EXACT copy from MotionController."""
         s = self.ranges.get(f"servo{sid}", {})
         try:
-            base_mid = int(s["mid"])
-            smin = int(s["min"])
-            smax = int(s["max"])
+            base_mid = int(s["mid"]) ; smin = int(s["min"]) ; smax = int(s["max"]) 
         except Exception:
             base_mid, smin, smax = 2048, 0, 4095
-        
-        # Try inverted mapping since 20mm seems to go all the way down
-        # If current mapping is wrong, try: 0mm -> min_ticks (low), 60mm -> max_ticks (high)
+        # mapping: 0mm -> max_ticks (low), 60mm -> base_mid (high)
         max_height_mm = 60.0
         h = max(0.0, min(max_height_mm, float(height_mm)))
         t = h / max_height_mm
-        
-        # Try the inverted mapping
-        target = int(round(smin + t * (smax - smin)))
-        return max(smin, min(smax, target))
+        target = int(round((1.0 - t) * smax + t * base_mid))
+        return self._clamp_ticks(target, smin, smax)
     
     def _hip_for_height(self, sid: int, height_mm: float) -> int:
         """Convert height in mm to hip servo position (for fine adjustments)."""
