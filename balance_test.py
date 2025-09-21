@@ -234,7 +234,7 @@ class BalanceController:
             leg_to_knee = {"FL": 2, "FR": 4, "RL": 6, "RR": 8}
             
             with self.manager_lock:
-                # First, set all hips to mid (like rc_drive.py)
+                # First, set all hips to mid (EXACTLY like MotionController.set_height)
                 for hip_id in hip_ids:
                     hip_pos = self._servo_mid(hip_id)
                     success, error = self.servo_manager.write_position(hip_id, hip_pos, self.speed, self.acc)
@@ -242,7 +242,7 @@ class BalanceController:
                         print(f"    Failed to set hip {hip_id}: {error}")
                     time.sleep(self.command_delay)
                 
-                # Then set knees with individual adjustments
+                # Then set knees with individual adjustments (EXACTLY like MotionController.set_height)
                 for leg_name, adjustment_mm in adjustments.items():
                     if abs(adjustment_mm) < 0.5:  # Skip tiny adjustments
                         continue
@@ -259,7 +259,7 @@ class BalanceController:
                               f"height: {self.base_height_mm:.1f} -> {target_height:.1f}mm")
                         self.last_positions[knee_id] = knee_pos
                     
-                    # Send servo command
+                    # Send servo command (EXACTLY like MotionController.set_height)
                     success, error = self.servo_manager.write_position(knee_id, knee_pos, self.speed, self.acc)
                     if not success and debug:
                         print(f"    Failed to write position to servo {knee_id}: {error}")
