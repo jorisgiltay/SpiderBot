@@ -149,7 +149,7 @@ class BalanceController:
     
     def apply_balance_correction(self, roll_deg: float, pitch_deg: float, debug: bool = False) -> bool:
         """
-        Apply balance correction by adjusting leg heights using MotionController.
+        Apply balance correction by adjusting individual leg heights.
         
         Args:
             roll_deg: Roll angle in degrees
@@ -161,18 +161,49 @@ class BalanceController:
         """
         adjustments = self.calculate_leg_adjustments(roll_deg, pitch_deg)
         
-        # For now, just set the base height - individual leg adjustments would need
-        # more complex logic to work with MotionController
         if debug:
             print(f"Balance adjustments: {adjustments}")
-            print(f"Setting base height: {self.base_height_mm}mm")
         
-        # Use MotionController's set_height method
-        success, error = self.motion_controller.set_height(self.base_height_mm, self.speed, self.acc)
-        if not success and debug:
-            print(f"Failed to set height: {error}")
+        # Check if any adjustments are significant
+        significant_adjustments = any(abs(adj) >= 0.5 for adj in adjustments.values())
+        if not significant_adjustments:
+            return True  # No significant adjustments needed
         
-        return success
+        try:
+            # Use MotionController's internal methods for individual servo control
+            # Map leg names to knee IDs
+            leg_to_knee = {"FL": 2, "FR": 4, "RL": 6, "RR": 8}
+            
+            with self.manager_lock:
+                # First set all hips to mid (like MotionController.set_height does)
+                hip_ids = [1, 3, 5, 7]
+                for hip_id in hip_ids:
+                    hip_pos = self.motion_controller._servo_mid(hip_id)
+                    success, error = self.servo_manager.write_position(hip_id, hip_pos, self.speed, self.acc)
+                    if not success and debug:
+                        print(f"    Failed to set hip {hip_id}: {error}")
+                
+                # Then set knees with individual adjustments
+                for leg_name, adjustment_mm in adjustments.items():
+                    if abs(adjustment_mm) < 0.5:  # Skip tiny adjustments
+                        continue
+                        
+                    knee_id = leg_to_knee[leg_name]
+                    target_height = self.base_height_mm + adjustment_mm
+                    knee_pos = self.motion_controller._knee_for_height(knee_id, target_height)
+                    
+                    if debug:
+                        print(f"  {leg_name} knee {knee_id}: height {self.base_height_mm:.1f} -> {target_height:.1f}mm, pos {knee_pos}")
+                    
+                    # Send servo command
+                    success, error = self.servo_manager.write_position(knee_id, knee_pos, self.speed, self.acc)
+                    if not success and debug:
+                        print(f"    Failed to write position to servo {knee_id}: {error}")
+            
+            return True
+        except Exception as e:
+            print(f"Error applying balance correction: {e}")
+            return False
     
     def set_base_height(self, height_mm: float) -> bool:
         """Set the base height for all legs when level using MotionController."""
