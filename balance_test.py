@@ -225,17 +225,29 @@ class BalanceController:
         adjustments = self.calculate_leg_adjustments(roll_deg, pitch_deg)
         
         try:
+            # Use same servo ID arrays as rc_drive.py
+            knee_ids = [2, 4, 6, 8]
+            hip_ids = [1, 3, 5, 7]
+            
+            # Map leg names to knee IDs for adjustments
+            leg_to_knee = {"FL": 2, "FR": 4, "RL": 6, "RR": 8}
+            
             with self.manager_lock:
+                # First, set all hips to mid (like rc_drive.py)
+                for hip_id in hip_ids:
+                    hip_pos = self._servo_mid(hip_id)
+                    success, error = self.servo_manager.write_position(hip_id, hip_pos, self.speed, self.acc)
+                    if not success and debug:
+                        print(f"    Failed to set hip {hip_id}: {error}")
+                    time.sleep(self.command_delay)
+                
+                # Then set knees with individual adjustments
                 for leg_name, adjustment_mm in adjustments.items():
                     if abs(adjustment_mm) < 0.5:  # Skip tiny adjustments
                         continue
                         
-                    hip_id, knee_id = self.legs[leg_name]
-                    
-                    # Calculate target heights
+                    knee_id = leg_to_knee[leg_name]
                     target_height = self.base_height_mm + adjustment_mm
-                    
-                    # Set knee to target height
                     knee_pos = self._knee_for_height(knee_id, target_height)
                     
                     # Debug: show position changes
@@ -251,13 +263,7 @@ class BalanceController:
                     if not success and debug:
                         print(f"    Failed to write position to servo {knee_id}: {error}")
                     
-                    # Add delay between servo commands to prevent overwhelming the bus
                     time.sleep(self.command_delay)
-                    
-                    # Optionally adjust hip slightly for fine tuning
-                    # hip_pos = self._hip_for_height(hip_id, adjustment_mm * 0.3)
-                    # self.servo_manager.write_position(hip_id, hip_pos, self.speed, self.acc)
-                    # time.sleep(self.command_delay)
             
             return True
         except Exception as e:
@@ -270,18 +276,23 @@ class BalanceController:
         return self._set_all_legs_to_height(self.base_height_mm)
     
     def _set_all_legs_to_height(self, height_mm: float) -> bool:
-        """Set all legs to the same height."""
+        """Set all legs to the same height - matches rc_drive.py implementation."""
         try:
+            # Use same servo ID arrays as rc_drive.py
+            knee_ids = [2, 4, 6, 8]
+            hip_ids = [1, 3, 5, 7]
+            
             with self.manager_lock:
-                for leg_name, (hip_id, knee_id) in self.legs.items():
-                    # Set hips to mid position
+                # Set ALL hips to mid first (like rc_drive.py)
+                for hip_id in hip_ids:
                     hip_pos = self._servo_mid(hip_id)
                     success, error = self.servo_manager.write_position(hip_id, hip_pos, self.speed, self.acc)
                     if not success:
                         print(f"Failed to set hip {hip_id} to {hip_pos}: {error}")
                     time.sleep(self.command_delay)
-                    
-                    # Set knees to target height
+                
+                # Then set ALL knees to target height (like rc_drive.py)
+                for knee_id in knee_ids:
                     knee_pos = self._knee_for_height(knee_id, height_mm)
                     success, error = self.servo_manager.write_position(knee_id, knee_pos, self.speed, self.acc)
                     if not success:
