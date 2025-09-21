@@ -162,7 +162,7 @@ class BalanceController:
         adjustments = self.calculate_leg_adjustments(roll_deg, pitch_deg)
         
         if debug:
-            print(f"Balance adjustments: {adjustments}")
+            pass  # Don't show balance adjustments
         
         # Check if any adjustments are significant
         significant_adjustments = any(abs(adj) >= 0.5 for adj in adjustments.values())
@@ -193,7 +193,7 @@ class BalanceController:
                     knee_pos = self.motion_controller._knee_for_height(knee_id, target_height)
                     
                     if debug:
-                        print(f"  {leg_name} knee {knee_id}: height {self.base_height_mm:.1f} -> {target_height:.1f}mm, pos {knee_pos}")
+                        pass  # Don't show individual servo details
                     
                     # Send servo command
                     success, error = self.servo_manager.write_position(knee_id, knee_pos, self.speed, self.acc)
@@ -252,7 +252,6 @@ def main() -> int:
     parser.add_argument("--acc", type=int, default=30, help="Servo acceleration for balance adjustments")
     parser.add_argument("--log-data", action="store_true", help="Log IMU and adjustment data")
     parser.add_argument("--debug-servos", action="store_true", help="Show detailed servo position changes")
-    parser.add_argument("--test-mode", action="store_true", help="Test mode with larger adjustments for visibility")
     parser.add_argument("--test-servos", action="store_true", help="Test servo movement before starting balance control")
     parser.add_argument("--command-delay", type=float, default=0.05, help="Delay between servo commands in seconds (default 0.05)")
     args = parser.parse_args()
@@ -292,12 +291,6 @@ def main() -> int:
     balance_controller.acc = args.acc
     balance_controller.command_delay = args.command_delay
     
-    # Test mode: increase sensitivity and reduce deadband for more visible movements
-    if args.test_mode:
-        balance_controller.sensitivity = 3.0  # Very aggressive for testing
-        balance_controller.deadband_deg = 0.1  # Almost no deadband
-        balance_controller.max_adjustment_mm = 30.0  # Larger max adjustments
-        print("TEST MODE: Very high sensitivity (3.0) and minimal deadband for visible movements")
 
     # Initialize robot to base height
     print(f"Setting robot to base height: {args.base_height}mm")
@@ -345,14 +338,14 @@ def main() -> int:
                     # Apply balance correction
                     success = balance_controller.apply_balance_correction(roll_deg, pitch_deg, debug=args.debug_servos)
                     
-                    if args.log_data or args.debug_servos:
+                    if args.debug_servos:
+                        print(f"Roll: {roll_deg:6.1f}°, Pitch: {pitch_deg:6.1f}°")
+                    elif args.log_data:
                         adjustments = balance_controller.calculate_leg_adjustments(roll_deg, pitch_deg)
                         print(f"Roll: {roll_deg:6.1f}°, Pitch: {pitch_deg:6.1f}°, Yaw: {yaw_deg:6.1f}°")
                         print(f"Adjustments: FL:{adjustments['FL']:+5.1f}mm FR:{adjustments['FR']:+5.1f}mm "
                               f"RL:{adjustments['RL']:+5.1f}mm RR:{adjustments['RR']:+5.1f}mm")
                         print(f"Success: {success}")
-                        if args.debug_servos:
-                            print("Servo position changes:")
                         print("-" * 40)
                 else:
                     if args.log_data:
