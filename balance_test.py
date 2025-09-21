@@ -107,8 +107,8 @@ class BalanceController:
         self.deadband_deg = 0.5  # Don't adjust if tilt is less than this
         
         # Servo control parameters
-        self.speed = 1500  # Slower for smoother balance adjustments
-        self.acc = 30     # Lower acceleration for smoother motion
+        self.speed = 2500  # Faster for more responsive balance adjustments
+        self.acc = 50     # Higher acceleration for quicker response
         
     
     def calculate_leg_adjustments(self, roll_deg: float, pitch_deg: float) -> Dict[str, float]:
@@ -247,8 +247,8 @@ def main() -> int:
     parser.add_argument("--max-adjustment", type=float, default=20.0, help="Maximum height adjustment per leg (mm)")
     parser.add_argument("--sensitivity", type=float, default=2.5, help="Balance sensitivity (0.0 to 5.0)")
     parser.add_argument("--deadband", type=float, default=0.5, help="Deadband in degrees (no adjustment below this)")
-    parser.add_argument("--rate", type=float, default=10.0, help="Update rate in Hz")
-    parser.add_argument("--speed", type=int, default=1500, help="Servo speed for balance adjustments")
+    parser.add_argument("--rate", type=float, default=20.0, help="Update rate in Hz")
+    parser.add_argument("--speed", type=int, default=2500, help="Servo speed for balance adjustments")
     parser.add_argument("--acc", type=int, default=30, help="Servo acceleration for balance adjustments")
     parser.add_argument("--log-data", action="store_true", help="Log IMU and adjustment data")
     parser.add_argument("--debug-servos", action="store_true", help="Show detailed servo position changes")
