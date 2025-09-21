@@ -147,11 +147,14 @@ class BalanceController:
         except Exception:
             base_mid, smin, smax = 2048, 0, 4095
         
-        # Mapping: 0mm -> max_ticks (low), 60mm -> base_mid (high)
+        # Try inverted mapping since 20mm seems to go all the way down
+        # If current mapping is wrong, try: 0mm -> min_ticks (low), 60mm -> max_ticks (high)
         max_height_mm = 60.0
         h = max(0.0, min(max_height_mm, float(height_mm)))
         t = h / max_height_mm
-        target = int(round((1.0 - t) * smax + t * base_mid))
+        
+        # Try the inverted mapping
+        target = int(round(smin + t * (smax - smin)))
         return max(smin, min(smax, target))
     
     def _hip_for_height(self, sid: int, height_mm: float) -> int:
