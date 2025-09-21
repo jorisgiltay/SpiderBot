@@ -103,8 +103,8 @@ class BalanceController:
         # Balance parameters
         self.base_height_mm = 40.0  # Base height when level
         self.max_adjustment_mm = 20.0  # Maximum height adjustment per leg
-        self.sensitivity = 0.5  # How aggressively to correct (0.0 to 1.0)
-        self.deadband_deg = 1.0  # Don't adjust if tilt is less than this
+        self.sensitivity = 1.5  # How aggressively to correct (0.0 to 3.0)
+        self.deadband_deg = 0.5  # Don't adjust if tilt is less than this
         
         # Servo control parameters
         self.speed = 1500  # Slower for smoother balance adjustments
@@ -245,8 +245,8 @@ def main() -> int:
     parser.add_argument("--servo-baud", type=int, default=1_000_000, help="Servo bus baud rate")
     parser.add_argument("--base-height", type=float, default=40.0, help="Base height in mm when level")
     parser.add_argument("--max-adjustment", type=float, default=20.0, help="Maximum height adjustment per leg (mm)")
-    parser.add_argument("--sensitivity", type=float, default=0.5, help="Balance sensitivity (0.0 to 1.0)")
-    parser.add_argument("--deadband", type=float, default=1.0, help="Deadband in degrees (no adjustment below this)")
+    parser.add_argument("--sensitivity", type=float, default=1.5, help="Balance sensitivity (0.0 to 3.0)")
+    parser.add_argument("--deadband", type=float, default=0.5, help="Deadband in degrees (no adjustment below this)")
     parser.add_argument("--rate", type=float, default=10.0, help="Update rate in Hz")
     parser.add_argument("--speed", type=int, default=1500, help="Servo speed for balance adjustments")
     parser.add_argument("--acc", type=int, default=30, help="Servo acceleration for balance adjustments")
@@ -294,10 +294,10 @@ def main() -> int:
     
     # Test mode: increase sensitivity and reduce deadband for more visible movements
     if args.test_mode:
-        balance_controller.sensitivity = 2.0  # Much more aggressive
+        balance_controller.sensitivity = 3.0  # Very aggressive for testing
         balance_controller.deadband_deg = 0.1  # Almost no deadband
-        balance_controller.max_adjustment_mm = 25.0  # Larger max adjustments
-        print("TEST MODE: Increased sensitivity and reduced deadband for visible movements")
+        balance_controller.max_adjustment_mm = 30.0  # Larger max adjustments
+        print("TEST MODE: Very high sensitivity (3.0) and minimal deadband for visible movements")
 
     # Initialize robot to base height
     print(f"Setting robot to base height: {args.base_height}mm")
