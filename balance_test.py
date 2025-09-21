@@ -148,12 +148,12 @@ class BalanceController:
             base_mid = int(s["mid"]) ; smin = int(s["min"]) ; smax = int(s["max"]) 
         except Exception:
             base_mid, smin, smax = 2048, 0, 4095
-        # INVERTED mapping for balance: 0mm -> base_mid (low), 60mm -> smin (high)
-        # This is the inverse of MotionController: 0mm -> smax, 60mm -> base_mid
+        # INVERTED mapping for balance: 0mm -> smin (low), 60mm -> base_mid (high)
+        # Use the lower half of the range: smin to base_mid
         max_height_mm = 60.0
         h = max(0.0, min(max_height_mm, float(height_mm)))
         t = h / max_height_mm
-        target = int(round(base_mid + t * (smin - base_mid)))
+        target = int(round(smin + t * (base_mid - smin)))
         return self._clamp_ticks(target, smin, smax)
     
     def _hip_for_height(self, sid: int, height_mm: float) -> int:
