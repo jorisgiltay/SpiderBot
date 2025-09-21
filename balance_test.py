@@ -111,6 +111,9 @@ class BalanceController:
         self.sensitivity = 0.5  # How aggressively to correct (0.0 to 1.0)
         self.deadband_deg = 1.0  # Don't adjust if tilt is less than this
         
+        # Debug tracking
+        self.last_positions = {}  # Track last servo positions for debugging
+        
         # Servo control parameters
         self.speed = 1500  # Slower for smoother balance adjustments
         self.acc = 30     # Lower acceleration for smoother motion
@@ -206,13 +209,14 @@ class BalanceController:
         
         return adjustments
     
-    def apply_balance_correction(self, roll_deg: float, pitch_deg: float) -> bool:
+    def apply_balance_correction(self, roll_deg: float, pitch_deg: float, debug: bool = False) -> bool:
         """
         Apply balance correction by adjusting leg heights.
         
         Args:
             roll_deg: Roll angle in degrees
             pitch_deg: Pitch angle in degrees
+            debug: If True, print detailed servo position information
             
         Returns:
             True if correction was applied successfully
@@ -232,7 +236,19 @@ class BalanceController:
                     
                     # Set knee to target height
                     knee_pos = self._knee_for_height(knee_id, target_height)
-                    self.servo_manager.write_position(knee_id, knee_pos, self.speed, self.acc)
+                    
+                    # Debug: show position changes
+                    if debug:
+                        old_pos = self.last_positions.get(knee_id, 0)
+                        pos_change = knee_pos - old_pos
+                        print(f"  {leg_name} knee {knee_id}: {old_pos} -> {knee_pos} (Δ{pos_change:+d}) "
+                              f"height: {self.base_height_mm:.1f} -> {target_height:.1f}mm")
+                        self.last_positions[knee_id] = knee_pos
+                    
+                    # Send servo command
+                    success, error = self.servo_manager.write_position(knee_id, knee_pos, self.speed, self.acc)
+                    if not success and debug:
+                        print(f"    Failed to write position to servo {knee_id}: {error}")
                     
                     # Optionally adjust hip slightly for fine tuning
                     # hip_pos = self._hip_for_height(hip_id, adjustment_mm * 0.3)
@@ -255,15 +271,39 @@ class BalanceController:
                 for leg_name, (hip_id, knee_id) in self.legs.items():
                     # Set hips to mid position
                     hip_pos = self._servo_mid(hip_id)
-                    self.servo_manager.write_position(hip_id, hip_pos, self.speed, self.acc)
+                    success, error = self.servo_manager.write_position(hip_id, hip_pos, self.speed, self.acc)
+                    if not success:
+                        print(f"Failed to set hip {hip_id} to {hip_pos}: {error}")
                     
                     # Set knees to target height
                     knee_pos = self._knee_for_height(knee_id, height_mm)
-                    self.servo_manager.write_position(knee_id, knee_pos, self.speed, self.acc)
+                    success, error = self.servo_manager.write_position(knee_id, knee_pos, self.speed, self.acc)
+                    if not success:
+                        print(f"Failed to set knee {knee_id} to {knee_pos}: {error}")
+                    else:
+                        self.last_positions[knee_id] = knee_pos
             
             return True
         except Exception as e:
             print(f"Error setting leg heights: {e}")
+            return False
+    
+    def test_servo_movement(self) -> bool:
+        """Test servo movement by making a visible height change."""
+        print("Testing servo movement...")
+        try:
+            # Move to a different height temporarily
+            test_height = self.base_height_mm + 10.0
+            print(f"Moving to test height: {test_height}mm")
+            success = self._set_all_legs_to_height(test_height)
+            if success:
+                time.sleep(2.0)
+                print(f"Returning to base height: {self.base_height_mm}mm")
+                success = self._set_all_legs_to_height(self.base_height_mm)
+                time.sleep(1.0)
+            return success
+        except Exception as e:
+            print(f"Error in servo test: {e}")
             return False
 
 
@@ -282,6 +322,9 @@ def main() -> int:
     parser.add_argument("--speed", type=int, default=1500, help="Servo speed for balance adjustments")
     parser.add_argument("--acc", type=int, default=30, help="Servo acceleration for balance adjustments")
     parser.add_argument("--log-data", action="store_true", help="Log IMU and adjustment data")
+    parser.add_argument("--debug-servos", action="store_true", help="Show detailed servo position changes")
+    parser.add_argument("--test-mode", action="store_true", help="Test mode with larger adjustments for visibility")
+    parser.add_argument("--test-servos", action="store_true", help="Test servo movement before starting balance control")
     args = parser.parse_args()
 
     # Setup servo manager
@@ -317,6 +360,13 @@ def main() -> int:
     balance_controller.deadband_deg = args.deadband
     balance_controller.speed = args.speed
     balance_controller.acc = args.acc
+    
+    # Test mode: increase sensitivity and reduce deadband for more visible movements
+    if args.test_mode:
+        balance_controller.sensitivity = 2.0  # Much more aggressive
+        balance_controller.deadband_deg = 0.1  # Almost no deadband
+        balance_controller.max_adjustment_mm = 25.0  # Larger max adjustments
+        print("TEST MODE: Increased sensitivity and reduced deadband for visible movements")
 
     # Initialize robot to base height
     print(f"Setting robot to base height: {args.base_height}mm")
@@ -327,6 +377,14 @@ def main() -> int:
         return 2
     
     time.sleep(1.0)  # Wait for servos to reach position
+
+    # Test servo movement if requested
+    if args.test_servos:
+        if not balance_controller.test_servo_movement():
+            print("Servo test failed - check connections and servo IDs")
+            servo_manager.disconnect()
+            msp.close()
+            return 2
 
     rate_dt = 1.0 / max(1.0, args.rate)
     
@@ -354,14 +412,16 @@ def main() -> int:
                     yaw_deg = yaw_raw / 10.0
                     
                     # Apply balance correction
-                    success = balance_controller.apply_balance_correction(roll_deg, pitch_deg)
+                    success = balance_controller.apply_balance_correction(roll_deg, pitch_deg, debug=args.debug_servos)
                     
-                    if args.log_data:
+                    if args.log_data or args.debug_servos:
                         adjustments = balance_controller.calculate_leg_adjustments(roll_deg, pitch_deg)
                         print(f"Roll: {roll_deg:6.1f}°, Pitch: {pitch_deg:6.1f}°, Yaw: {yaw_deg:6.1f}°")
                         print(f"Adjustments: FL:{adjustments['FL']:+5.1f}mm FR:{adjustments['FR']:+5.1f}mm "
                               f"RL:{adjustments['RL']:+5.1f}mm RR:{adjustments['RR']:+5.1f}mm")
                         print(f"Success: {success}")
+                        if args.debug_servos:
+                            print("Servo position changes:")
                         print("-" * 40)
                 else:
                     if args.log_data:
