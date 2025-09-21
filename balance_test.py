@@ -131,13 +131,13 @@ class BalanceController:
         pitch_adj = pitch_deg * self.sensitivity
         
         # Calculate adjustments for each leg
-        # Roll: positive roll means right side is higher, so lower right legs
+        # Roll: INVERTED - positive roll means right side is higher, so raise right legs
         # Pitch: INVERTED - positive pitch means front is higher, so raise front legs
         adjustments = {
-            "FL": +pitch_adj + roll_adj,   # Front Left: raise if front high, raise if left high
-            "FR": +pitch_adj - roll_adj,   # Front Right: raise if front high, lower if right high  
-            "RL": -pitch_adj + roll_adj,   # Rear Left: lower if front high, raise if left high
-            "RR": -pitch_adj - roll_adj,   # Rear Right: lower if front high, lower if right high
+            "FL": +pitch_adj - roll_adj,   # Front Left: raise if front high, lower if left high
+            "FR": +pitch_adj + roll_adj,   # Front Right: raise if front high, raise if right high  
+            "RL": -pitch_adj - roll_adj,   # Rear Left: lower if front high, lower if left high
+            "RR": -pitch_adj + roll_adj,   # Rear Right: lower if front high, raise if right high
         }
         
         # Clamp adjustments to maximum range
