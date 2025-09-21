@@ -101,8 +101,8 @@ class BalanceController:
         self.motion_controller = MotionController(servo_manager, manager_lock)
         
         # Balance parameters
-        self.base_height_mm = 20.0  # Base height when level
-        self.max_adjustment_mm = 15.0  # Maximum height adjustment per leg
+        self.base_height_mm = 40.0  # Base height when level
+        self.max_adjustment_mm = 20.0  # Maximum height adjustment per leg
         self.sensitivity = 0.5  # How aggressively to correct (0.0 to 1.0)
         self.deadband_deg = 1.0  # Don't adjust if tilt is less than this
         
@@ -207,7 +207,7 @@ class BalanceController:
     
     def set_base_height(self, height_mm: float) -> bool:
         """Set the base height for all legs when level using MotionController."""
-        self.base_height_mm = max(0.0, min(60.0, height_mm))
+        self.base_height_mm = max(0.0, min(80.0, height_mm))
         success, error = self.motion_controller.set_height(self.base_height_mm, self.speed, self.acc)
         if not success:
             print(f"Failed to set base height: {error}")
@@ -243,8 +243,8 @@ def main() -> int:
     parser.add_argument("--msp-baud", type=int, default=115200, help="MSP/FC baud rate")
     parser.add_argument("--servo-port", default=None, help="Servo bus serial port")
     parser.add_argument("--servo-baud", type=int, default=1_000_000, help="Servo bus baud rate")
-    parser.add_argument("--base-height", type=float, default=20.0, help="Base height in mm when level")
-    parser.add_argument("--max-adjustment", type=float, default=15.0, help="Maximum height adjustment per leg (mm)")
+    parser.add_argument("--base-height", type=float, default=40.0, help="Base height in mm when level")
+    parser.add_argument("--max-adjustment", type=float, default=20.0, help="Maximum height adjustment per leg (mm)")
     parser.add_argument("--sensitivity", type=float, default=0.5, help="Balance sensitivity (0.0 to 1.0)")
     parser.add_argument("--deadband", type=float, default=1.0, help="Deadband in degrees (no adjustment below this)")
     parser.add_argument("--rate", type=float, default=10.0, help="Update rate in Hz")
