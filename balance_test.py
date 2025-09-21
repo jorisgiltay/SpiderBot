@@ -117,6 +117,7 @@ class BalanceController:
         # Servo control parameters
         self.speed = 1500  # Slower for smoother balance adjustments
         self.acc = 30     # Lower acceleration for smoother motion
+        self.command_delay = 0.05  # Delay between servo commands (50ms)
         
     def _load_servo_ranges(self) -> Dict:
         """Load servo ranges from JSON file."""
@@ -250,9 +251,13 @@ class BalanceController:
                     if not success and debug:
                         print(f"    Failed to write position to servo {knee_id}: {error}")
                     
+                    # Add delay between servo commands to prevent overwhelming the bus
+                    time.sleep(self.command_delay)
+                    
                     # Optionally adjust hip slightly for fine tuning
                     # hip_pos = self._hip_for_height(hip_id, adjustment_mm * 0.3)
                     # self.servo_manager.write_position(hip_id, hip_pos, self.speed, self.acc)
+                    # time.sleep(self.command_delay)
             
             return True
         except Exception as e:
@@ -274,6 +279,7 @@ class BalanceController:
                     success, error = self.servo_manager.write_position(hip_id, hip_pos, self.speed, self.acc)
                     if not success:
                         print(f"Failed to set hip {hip_id} to {hip_pos}: {error}")
+                    time.sleep(self.command_delay)
                     
                     # Set knees to target height
                     knee_pos = self._knee_for_height(knee_id, height_mm)
@@ -282,6 +288,7 @@ class BalanceController:
                         print(f"Failed to set knee {knee_id} to {knee_pos}: {error}")
                     else:
                         self.last_positions[knee_id] = knee_pos
+                    time.sleep(self.command_delay)
             
             return True
         except Exception as e:
@@ -297,10 +304,10 @@ class BalanceController:
             print(f"Moving to test height: {test_height}mm")
             success = self._set_all_legs_to_height(test_height)
             if success:
-                time.sleep(2.0)
+                time.sleep(3.0)  # Wait longer for servos to reach test position
                 print(f"Returning to base height: {self.base_height_mm}mm")
                 success = self._set_all_legs_to_height(self.base_height_mm)
-                time.sleep(1.0)
+                time.sleep(2.0)  # Wait longer for servos to return
             return success
         except Exception as e:
             print(f"Error in servo test: {e}")
@@ -325,6 +332,7 @@ def main() -> int:
     parser.add_argument("--debug-servos", action="store_true", help="Show detailed servo position changes")
     parser.add_argument("--test-mode", action="store_true", help="Test mode with larger adjustments for visibility")
     parser.add_argument("--test-servos", action="store_true", help="Test servo movement before starting balance control")
+    parser.add_argument("--command-delay", type=float, default=0.05, help="Delay between servo commands in seconds (default 0.05)")
     args = parser.parse_args()
 
     # Setup servo manager
@@ -360,6 +368,7 @@ def main() -> int:
     balance_controller.deadband_deg = args.deadband
     balance_controller.speed = args.speed
     balance_controller.acc = args.acc
+    balance_controller.command_delay = args.command_delay
     
     # Test mode: increase sensitivity and reduce deadband for more visible movements
     if args.test_mode:
@@ -376,7 +385,7 @@ def main() -> int:
         msp.close()
         return 2
     
-    time.sleep(1.0)  # Wait for servos to reach position
+    time.sleep(2.0)  # Wait longer for servos to reach position
 
     # Test servo movement if requested
     if args.test_servos:
