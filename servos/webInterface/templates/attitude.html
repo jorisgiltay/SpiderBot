@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SpiderBot Attitude</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script defer src="/static/attitude.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: Inter, system-ui, Segoe UI, Roboto, Arial, sans-serif; }
+    .grid2 { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; align-items: start; }
+    .vh input[type="range"]{ width: 260px; }
+    .small { color: #94a3b8; font-size: 12px; }
+    .mono { font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .cols { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 8px; }
+  </style>
+  </head>
+<body>
+  <div class="container">
+    <header class="hero">
+      <div class="hero-inner">
+        <h1>SpiderBot Attitude (Pitch/Roll)</h1>
+        <p>Compute ideal foot heights from analytical pitch/roll. Rectangle: 93 mm (roll axis) × 80 mm (pitch axis).</p>
+      </div>
+    </header>
+
+    <section class="card">
+      <h2>Connection</h2>
+      <div class="row">
+        <label>Port</label>
+        <select id="portSelect"></select>
+        <button id="refreshPorts">Refresh</button>
+      </div>
+      <div class="row">
+        <label>Baudrate</label>
+        <input id="baudInput" type="number" value="1000000" />
+      </div>
+      <div class="row">
+        <button id="connectBtn" class="accent">Connect</button>
+        <button id="disconnectBtn">Disconnect</button>
+        <span id="connStatus" class="status">Not connected</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Geometry</h2>
+      <div class="row">
+        <label>Roll span (mm)</label>
+        <input id="spanRoll" type="number" value="93" step="0.5" />
+        <label>Pitch span (mm)</label>
+        <input id="spanPitch" type="number" value="80" step="0.5" />
+      </div>
+      <div class="row small">Angle over longer side is roll (± about X), over shorter side is pitch (± about Y).</div>
+    </section>
+
+    <section class="card">
+      <h2>Attitude</h2>
+      <div class="row vh">
+        <label>Roll (deg)</label>
+        <input id="rollDeg" type="range" min="-20" max="20" value="0" step="0.25" />
+        <span id="rollLabel" class="small mono">0.00°</span>
+      </div>
+      <div class="row vh">
+        <label>Pitch (deg)</label>
+        <input id="pitchDeg" type="range" min="-20" max="20" value="0" step="0.25" />
+        <span id="pitchLabel" class="small mono">0.00°</span>
+      </div>
+      <div class="row">
+        <label>Reference height (mm)</label>
+        <input id="refHeight" type="number" value="35" step="1" />
+        <label>Scale factor</label>
+        <input id="scaleFactor" type="number" value="1.0" step="0.05" />
+        <label><input id="invertSign" type="checkbox" /> Invert angle sign (display/apply)</label>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Corner Heights (mm)</h2>
+      <div class="cols mono">
+        <div>
+          <div class="small">Front-Left</div>
+          <div id="hFL">0.00</div>
+          <div class="small">θ FL</div>
+          <div id="theta_FL">0.00°</div>
+          <div class="small">ticks FL</div>
+          <div id="ticks_FL">-</div>
+        </div>
+        <div>
+          <div class="small">Front-Right</div>
+          <div id="hFR">0.00</div>
+          <div class="small">θ FR</div>
+          <div id="theta_FR">0.00°</div>
+          <div class="small">ticks FR</div>
+          <div id="ticks_FR">-</div>
+        </div>
+        <div>
+          <div class="small">Rear-Left</div>
+          <div id="hRL">0.00</div>
+          <div class="small">θ RL</div>
+          <div id="theta_RL">0.00°</div>
+          <div class="small">ticks RL</div>
+          <div id="ticks_RL">-</div>
+        </div>
+        <div>
+          <div class="small">Rear-Right</div>
+          <div id="hRR">0.00</div>
+          <div class="small">θ RR</div>
+          <div id="theta_RR">0.00°</div>
+          <div class="small">ticks RR</div>
+          <div id="ticks_RR">-</div>
+        </div>
+      </div>
+      <div class="row small">Positive roll lowers right side; positive pitch lowers front (conventional aerospace sign).</div>
+    </section>
+
+    <section class="card">
+      <h2>Apply to Servos</h2>
+      <div class="grid2">
+        <div>
+          <div class="row"><label>Servo ID FL</label><input id="sidFL" type="number" value="2" /></div>
+          <div class="row"><label>Servo ID FR</label><input id="sidFR" type="number" value="4" /></div>
+          <div class="row"><label>Servo ID RL</label><input id="sidRL" type="number" value="6" /></div>
+          <div class="row"><label>Servo ID RR</label><input id="sidRR" type="number" value="8" /></div>
+        </div>
+        <div>
+          <div class="row"><label>Speed (ticks/s)</label><input id="applySpeed" type="number" value="2400" /></div>
+          <div class="row"><label>Acc</label><input id="applyAcc" type="number" value="50" /></div>
+          <div class="row"><label>Bias ticks</label><input id="biasTicks" type="number" value="0" /></div>
+        </div>
+      </div>
+      <div class="row">
+        <button class="accent" onclick="applyAngles()">Apply Angles</button>
+      </div>
+      <pre id="applyResult" class="mono small">{}</pre>
+    </section>
+
+    <footer>
+      <small><a href="/">Home</a> · <a href="/controls">Controls</a></small>
+    </footer>
+  </div>
+</body>
+</html>
+
+
