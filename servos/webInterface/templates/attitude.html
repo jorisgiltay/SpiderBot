@@ -45,6 +45,47 @@
       </div>
     </section>
 
+    <!-- PID Controller card removed by request -->
+    <section class="card">
+      <h2>IMU (MSP)</h2>
+      <div class="row">
+        <label>MSP Port</label>
+        <input id="mspPort" type="text" placeholder="COM4 or /dev/ttyAMA0" />
+        <label>Baud</label>
+        <input id="mspBaud" type="number" value="115200" />
+        <button onclick="mspConnect()">Connect IMU</button>
+        <button onclick="mspDisconnect()">Disconnect IMU</button>
+        <span id="mspStatus" class="status">IMU disconnected</span>
+      </div>
+      <div class="row small">
+        <button onclick="startImu()">Start IMU</button>
+        <button onclick="stopImu()">Stop IMU</button>
+      </div>
+      <div class="row"><span id="imuReadout" class="mono small">IMU: -</span></div>
+      <div class="row">
+        <button onclick="startRecording()">Start Recording</button>
+        <button onclick="stopRecording()">Stop Recording</button>
+        <label class="small">Step</label>
+        <input id="sweepStep" type="number" value="1" step="0.5" style="width:80px" />
+        <label class="small">Settle (s)</label>
+        <input id="sweepSettle" type="number" value="0.15" step="0.05" style="width:90px" />
+      </div>
+      <div class="row">
+        <button onclick="sweepRoll()">Sweep Roll</button>
+        <button onclick="sweepPitch()">Sweep Pitch</button>
+        <button onclick="sweepDiagPP()">Sweep Diagonal ++</button>
+        <button onclick="sweepDiagPN()">Sweep Diagonal +-</button>
+      </div>
+      <div class="row">
+        <button onclick="plotRecorded()">Plot Recorded</button>
+        <button class="accent" onclick="downloadCSV()">Download CSV</button>
+      </div>
+      <canvas id="recordCanvas" width="960" height="420" style="width:100%;max-width:960px;border:1px solid #334155;border-radius:6px"></canvas>
+    </section>
+
+
+    <!-- PID Controller section removed -->
+
     <section class="card">
       <h2>Geometry</h2>
       <div class="row">
@@ -70,10 +111,10 @@
       </div>
       <div class="row">
         <label>Reference height (mm)</label>
-        <input id="refHeight" type="number" value="35" step="1" />
+        <input id="refHeight" type="number" value="34" step="1" />
         <label>Scale factor</label>
-        <input id="scaleFactor" type="number" value="1.0" step="0.05" />
-        <label><input id="invertSign" type="checkbox" /> Invert angle sign (display/apply)</label>
+        <input id="scaleFactor" type="number" value="2.0" step="0.05" />
+        <!-- Command scaling is now fixed in code at 0.8 (for display/log only) -->
       </div>
     </section>
 
