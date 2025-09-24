@@ -64,6 +64,11 @@ class ServoManager:
 
     def connect(self, port: str, baudrate: int) -> Tuple[bool, Optional[str]]:
         try:
+            # Ensure any previous handle is fully closed before reconnect
+            try:
+                self.disconnect()
+            except Exception:
+                pass
             self.port_handler = PortHandler(port)
             if not self.port_handler.openPort():
                 return False, "Failed to open port"
@@ -88,10 +93,16 @@ class ServoManager:
 
     def scan_ids(self, start_id: int = 1, end_id: int = 30) -> List[int]:
         found: List[int] = []
+        if not self.is_connected or self.packet_handler is None:
+            return found
         for sid in range(start_id, end_id + 1):
-            model, res, _ = self.packet_handler.ping(sid)  # type: ignore
-            if res == COMM_SUCCESS:
-                found.append(sid)
+            try:
+                _model, res, _ = self.packet_handler.ping(sid)  # type: ignore
+                if res == COMM_SUCCESS:
+                    found.append(sid)
+            except Exception:
+                # Ignore ping errors and continue
+                pass
         return found
 
     def _read2(self, sid: int, addr_l: int) -> Tuple[int, int, int]:

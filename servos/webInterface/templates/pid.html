@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SpiderBot PID (Roll)</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+  <script defer src="/static/battery.js"></script>
+  <script defer src="/static/pid.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: Inter, system-ui, Segoe UI, Roboto, Arial, sans-serif; }
+    .small { color: #94a3b8; font-size: 12px; }
+    .mono { font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  </style>
+</head>
+<body>
+  <nav class="sidenav">
+    <a href="/">Home</a>
+    <a href="/controls">Controls</a>
+    <a href="/attitude">Attitude</a>
+    <a href="/pid" class="active">PID</a>
+  </nav>
+  <div class="container">
+    <header class="hero">
+      <div class="hero-inner">
+        <h1>PID – Roll Only</h1>
+        <p>Tune PID for roll. Geometry scaling is applied in the kinematics path.</p>
+      </div>
+    </header>
+
+    <!-- Connection moved to top bar -->
+
+    <section class="card">
+      <h2>IMU (MSP)</h2>
+      <div class="row small">
+        <button id="startImuBtn" onclick="startImu()" disabled>Start IMU</button>
+        <button id="stopImuBtn" onclick="stopImu()" disabled>Stop IMU</button>
+      </div>
+      <div class="row"><span id="imuReadout" class="mono small">IMU: -</span></div>
+    </section>
+
+    <section class="card">
+      <h2>PID Roll</h2>
+      <div class="row">
+        <label>Kp</label>
+        <input id="pidKp" type="number" value="2" step="0.05" />
+        <label>Ki</label>
+        <input id="pidKi" type="number" value="0.03" step="0.01" />
+        <label>Kd</label>
+        <input id="pidKd" type="number" value="0.32" step="0.01" />
+      </div>
+      <div class="row">
+        <label>Rate (Hz)</label>
+        <input id="pidRate" type="number" value="30" step="1" />
+        <label>Limit (deg)</label>
+        <input id="pidLimit" type="number" value="30" step="0.5" />
+      </div>
+      <div class="row">
+        <label>Setpoint roll (deg)</label>
+        <input id="pidSetRoll" type="number" value="0" step="0.5" />
+        <label>Base roll (−slider)</label>
+        <input id="pidBaseRoll" type="number" value="0" step="0.5" />
+        <label>Base pitch (−slider)</label>
+        <input id="pidBasePitch" type="number" value="0" step="0.5" />
+      </div>
+      <div class="row">
+        <label>Auto-level gain</label>
+        <input id="pidAutoGain" type="number" value="15" step="0.5" />
+        <label>Auto-level tau (s)</label>
+        <input id="pidAutoTau" type="number" value="0.25" step="0.05" />
+        <label>Cmd slew (deg/s)</label>
+        <input id="pidSlew" type="number" value="10" step="0.5" />
+      </div>
+      <div class="row">
+        <label>Ref height</label>
+        <input id="pidRefH" type="number" value="34" step="1" />
+        <label>Scale</label>
+        <input id="pidScale" type="number" value="2.0" step="0.05" />
+        <label>Span roll</label>
+        <input id="pidSpanRoll" type="number" value="93" step="0.5" />
+        <label>Span pitch</label>
+        <input id="pidSpanPitch" type="number" value="80" step="0.5" />
+      </div>
+      <div class="row">
+        <button class="accent" onclick="pidStart()">Start PID</button>
+        <button onclick="pidStop()">Stop</button>
+        <button onclick="pidSetSetpoint()">Set Setpoint</button>
+        <button onclick="pidApplyConfig()">Apply Config</button>
+      </div>
+      <pre id="pidStatus" class="mono small">PID: stopped</pre>
+      <div class="row small">
+        <button onclick="pidPlotStart()">Start Plot</button>
+        <button onclick="pidPlotStop()">Stop Plot</button>
+        <button onclick="pidPlotClear()">Clear Plot</button>
+      </div>
+      <canvas id="pidCanvas" width="960" height="360" style="width:100%;max-width:960px;border:1px solid #334155;border-radius:6px"></canvas>
+    </section>
+
+    
+  </div>
+</body>
+</html>
+
+

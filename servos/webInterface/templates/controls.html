@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SpiderBot Controls</title>
   <link rel="stylesheet" href="/static/styles.css" />
+  <script defer src="/static/battery.js"></script>
   <script defer src="/static/controls.js"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -20,6 +21,12 @@
   </style>
   </head>
 <body>
+  <nav class="sidenav">
+    <a href="/">Home</a>
+    <a href="/controls" class="active">Controls</a>
+    <a href="/attitude">Attitude</a>
+    <a href="/pid">PID</a>
+  </nav>
   <div class="container">
     <header class="hero">
       <div class="hero-inner">
@@ -28,23 +35,7 @@
       </div>
     </header>
 
-    <section class="card">
-      <h2>Connection</h2>
-      <div class="row">
-        <label>Port</label>
-        <select id="portSelect"></select>
-        <button id="refreshPorts">Refresh</button>
-      </div>
-      <div class="row">
-        <label>Baudrate</label>
-        <input id="baudInput" type="number" value="1000000" />
-      </div>
-      <div class="row">
-        <button id="connectBtn" class="accent">Connect</button>
-        <button id="disconnectBtn">Disconnect</button>
-        <span id="connStatus" class="status">Not connected</span>
-      </div>
-    </section>
+    <!-- Connection moved to top bar -->
 
     <section class="card">
       <h2>Drive</h2>

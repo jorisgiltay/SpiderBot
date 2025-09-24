@@ -44,9 +44,11 @@ async function disconnect(){
 async function scan(){
   const start = parseInt(qs('scanStart').value||'1',10);
   const end = parseInt(qs('scanEnd').value||'30',10);
-  const data = await api('GET',`/api/scan?start=${start}&end=${end}`);
-  buildServoTabs(data.ids||[]);
-  if ((data.ids||[]).length){ setActiveServo((data.ids||[])[0]); }
+  const data = await api('GET',`/api/scan?start=${start}&end=${end}`).catch(()=>({ok:false,error:'Scan failed'}));
+  if(!data || data.ok === false){ alert(data && data.error ? data.error : 'Not connected'); return; }
+  const ids = data.ids || [];
+  buildServoTabs(ids);
+  if (ids.length){ setActiveServo(ids[0]); }
 }
 
 async function loadParams(){
@@ -342,22 +344,22 @@ function initSubtabs(){
 }
 
 window.addEventListener('DOMContentLoaded', ()=>{
-  qs('refreshPorts').addEventListener('click', loadPorts);
-  qs('connectBtn').addEventListener('click', connect);
-  qs('disconnectBtn').addEventListener('click', disconnect);
-  qs('scanBtn').addEventListener('click', scan);
-  qs('saveParams').addEventListener('click', saveParams);
+  const rp = qs('refreshPorts'); if(rp) rp.addEventListener('click', loadPorts);
+  const cb = qs('connectBtn'); if(cb) cb.addEventListener('click', connect);
+  const db = qs('disconnectBtn'); if(db) db.addEventListener('click', disconnect);
+  const sb = qs('scanBtn'); if(sb) sb.addEventListener('click', scan);
+  const sp = qs('saveParams'); if(sp) sp.addEventListener('click', saveParams);
   const sp2 = qs('saveParams2'); if(sp2) sp2.addEventListener('click', saveParams);
-  qs('refreshStatus').addEventListener('click', refreshStatus);
-  qs('sendPos').addEventListener('click', sendPos);
-  qs('sendWheel').addEventListener('click', sendWheel);
-  qs('torqueOn').addEventListener('click', torqueOn);
-  qs('torqueOff').addEventListener('click', torqueOff);
-  qs('lockOn').addEventListener('click', lockOn);
-  qs('lockOff').addEventListener('click', lockOff);
-  qs('changeId').addEventListener('click', changeId);
-  qs('changeBaud').addEventListener('click', changeBaud);
-  loadPorts();
+  const rs = qs('refreshStatus'); if(rs) rs.addEventListener('click', refreshStatus);
+  const p1 = qs('sendPos'); if(p1) p1.addEventListener('click', sendPos);
+  const p2 = qs('sendWheel'); if(p2) p2.addEventListener('click', sendWheel);
+  const tOn = qs('torqueOn'); if(tOn) tOn.addEventListener('click', torqueOn);
+  const tOff = qs('torqueOff'); if(tOff) tOff.addEventListener('click', torqueOff);
+  const lOn = qs('lockOn'); if(lOn) lOn.addEventListener('click', lockOn);
+  const lOff = qs('lockOff'); if(lOff) lOff.addEventListener('click', lockOff);
+  const chId = qs('changeId'); if(chId) chId.addEventListener('click', changeId);
+  const chB = qs('changeBaud'); if(chB) chB.addEventListener('click', changeBaud);
+  if(rp){ loadPorts(); }
   initSubtabs();
 
   const au = qs('autoUpdate');

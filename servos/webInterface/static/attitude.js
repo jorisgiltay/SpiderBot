@@ -137,7 +137,7 @@ function attach() {
   updateHeights();
 }
 
-window.addEventListener('DOMContentLoaded', attach);
+window.addEventListener('DOMContentLoaded', ()=>{ try{ attach(); }catch(e){} });
 
 // Apply button handler
 function applyAngles() {

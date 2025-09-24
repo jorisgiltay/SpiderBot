@@ -55,9 +55,9 @@ async function applyHeight(){
 }
 
 window.addEventListener('DOMContentLoaded', ()=>{
-  qs('refreshPorts').addEventListener('click', loadPorts);
-  qs('connectBtn').addEventListener('click', connect);
-  qs('disconnectBtn').addEventListener('click', disconnect);
+  const rp = qs('refreshPorts'); if(rp) rp.addEventListener('click', loadPorts);
+  const cb = qs('connectBtn'); if(cb) cb.addEventListener('click', connect);
+  const db = qs('disconnectBtn'); if(db) db.addEventListener('click', disconnect);
 
   qs('btnForward').addEventListener('click', ()=> startMode('forward'));
   qs('btnBackward').addEventListener('click', ()=> startMode('backward'));
@@ -78,7 +78,7 @@ window.addEventListener('DOMContentLoaded', ()=>{
   const up = document.getElementById('btnUp'); if(up){ up.addEventListener('click', ()=>{ const hr = qs('heightRange'); hr.value = String(Math.min(60, parseFloat(hr.value||'0')+2)); qs('applyHeight').click(); }); }
   const down = document.getElementById('btnDown'); if(down){ down.addEventListener('click', ()=>{ const hr = qs('heightRange'); hr.value = String(Math.max(0, parseFloat(hr.value||'0')-2)); qs('applyHeight').click(); }); }
 
-  loadPorts();
+  if(rp){ loadPorts(); }
 });
 
 
